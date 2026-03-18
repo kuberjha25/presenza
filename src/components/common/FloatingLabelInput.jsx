@@ -4,7 +4,8 @@ import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from 'react-native-responsive-screen';
-import { Colors, Fonts } from '../../utils/GlobalText';
+import { Fonts } from '../../utils/GlobalText';
+import { useTheme } from '../../context/ThemeContext';
 
 const FloatingLabelInput = ({
   label,
@@ -22,6 +23,10 @@ const FloatingLabelInput = ({
   style,
   ...props
 }) => {
+
+  const { theme } = useTheme();
+  const C = theme.colors;
+
   const [isFocused, setIsFocused] = useState(false);
   const floatingAnim = useRef(new Animated.Value(value ? 1 : 0)).current;
 
@@ -46,9 +51,9 @@ const FloatingLabelInput = ({
     }),
     color: floatingAnim.interpolate({
       inputRange: [0, 1],
-      outputRange: [Colors.textSecondary, isFocused ? Colors.primary : Colors.textSecondary],
+      outputRange: [C.textSecondary, isFocused ? C.primary : C.textSecondary],
     }),
-    backgroundColor: Colors.background,
+    backgroundColor: C.background,
     paddingHorizontal: wp('1.5%'),
     zIndex: 10,
     fontFamily: Fonts.medium,
@@ -59,11 +64,16 @@ const FloatingLabelInput = ({
       <Animated.Text style={labelStyle}>
         {label}
       </Animated.Text>
+
       <TextInput
         style={[
           styles.input,
-          isFocused && styles.inputFocused,
-          !editable && styles.inputDisabled,
+          {
+            borderColor: isFocused ? C.primary : C.border,
+            backgroundColor: C.background,
+            color: C.textPrimary,
+          },
+          !editable && { backgroundColor: C.disabled },
         ]}
         value={value}
         onChangeText={onChangeText}
@@ -79,7 +89,7 @@ const FloatingLabelInput = ({
         autoCapitalize={autoCapitalize}
         maxLength={maxLength}
         placeholder={isFocused ? placeholder : ''}
-        placeholderTextColor={placeholderTextColor || Colors.textSecondary}
+        placeholderTextColor={placeholderTextColor || C.textSecondary}
         secureTextEntry={secureTextEntry}
         editable={editable}
         {...props}
@@ -93,23 +103,14 @@ const styles = StyleSheet.create({
     marginBottom: hp('2.5%'),
     position: 'relative',
   },
+
   input: {
     height: hp('7%'),
     borderWidth: 1.5,
-    borderColor: Colors.border,
     borderRadius: wp('3%'),
     paddingHorizontal: wp('4%'),
     fontSize: wp('3.8%'),
-    color: Colors.textPrimary,
-    backgroundColor: Colors.background,
     fontFamily: Fonts.light,
-  },
-  inputFocused: {
-    borderColor: Colors.primary,
-  },
-  inputDisabled: {
-    opacity: 0.6,
-    backgroundColor: Colors.disabled,
   },
 });
 

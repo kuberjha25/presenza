@@ -56,7 +56,7 @@ export const checkBiometricAvailability = () => async dispatch => {
     dispatch({ type: SET_BIOMETRIC_AVAILABLE, payload: available });
     return available;
   } catch (error) {
-    console.error('Biometric check error:', error);
+    console.log('Biometric check error:', error);
     dispatch({ type: SET_BIOMETRIC_AVAILABLE, payload: false });
     return false;
   }
@@ -76,7 +76,7 @@ export const initBiometrics = () => async dispatch => {
     dispatch({ type: SET_BIOMETRIC_AVAILABLE, payload: false });
     return false;
   } catch (error) {
-    console.error('Biometrics init error:', error);
+    console.log('Biometrics init error:', error);
     dispatch({ type: SET_BIOMETRIC_AVAILABLE, payload: false });
     return false;
   }
@@ -124,7 +124,7 @@ export const sendOtp = email => async dispatch => {
       email: email.trim().toLowerCase(),
     };
   } catch (error) {
-    console.error('Send OTP error:', error);
+    console.log('Send OTP error:', error);
     dispatch({
       type: SEND_OTP_FAIL,
       payload: 'Network error. Please try again.',
@@ -170,7 +170,7 @@ export const resendOtp = email => async dispatch => {
 
     return { success: true };
   } catch (error) {
-    console.error('Resend OTP error:', error);
+    console.log('Resend OTP error:', error);
     dispatch({
       type: SEND_OTP_FAIL,
       payload: 'Network error. Please try again.',
@@ -219,7 +219,7 @@ export const verifyOtp = (email, otp) => async dispatch => {
     // dispatch(setAlert('Login successful', 'success'));
     return { success: true, data: data.data };
   } catch (error) {
-    console.error('Verify OTP error:', error);
+    console.log('Verify OTP error:', error);
     dispatch({
       type: VERIFY_OTP_FAIL,
       payload: 'Network error. Please try again.',
@@ -286,7 +286,7 @@ export const biometricLogin = () => async dispatch => {
     });
     return { success: false };
   } catch (error) {
-    console.error('❌ Biometric login error:', error);
+    console.log('❌ Biometric login error:', error);
     dispatch({
       type: BIOMETRIC_LOGIN_FAIL,
       payload: error.message,
@@ -323,7 +323,7 @@ export const refreshToken = refreshToken => async dispatch => {
 
     return access.token;
   } catch (error) {
-    console.error('Refresh token error:', error);
+    console.log('Refresh token error:', error);
     dispatch({ type: REFRESH_TOKEN_FAIL });
     dispatch(logout());
     return null;
@@ -361,7 +361,7 @@ export const logout = () => async dispatch => {
 
     console.log('✅ Logout complete');
   } catch (error) {
-    console.error('❌ Logout error:', error);
+    console.log('❌ Logout error:', error);
     dispatch({ type: LOGOUT });
     dispatch(setAlert('Logged out', 'info'));
   }
@@ -402,7 +402,7 @@ export const resetAppState = () => ({
 
 //     return true;
 //   } catch (error) {
-//     console.error('Save credentials error:', error);
+//     console.log('Save credentials error:', error);
 //     return false;
 //   }
 // };
@@ -417,36 +417,50 @@ export const resetAppState = () => ({
 //     }
 //     return null;
 //   } catch (error) {
-//     console.error('Get credentials error:', error);
+//     console.log('Get credentials error:', error);
 //     return null;
 //   }
 // };
 
 // ==================== CHECK AUTH STATE ====================
+// ==================== CHECK AUTH STATE ====================
 export const checkAuthState = () => async dispatch => {
   try {
-    console.log('Checking auth state...');
+    console.log('🔍 Checking auth state...');
+    
+    // Pehle loading true karo
+    dispatch({ type: AUTH_LOADING, payload: true });
 
     const accessToken = await getAccessToken();
     const refreshToken = await getRefreshToken();
     const user = await getUser();
 
+    console.log('📦 Storage check:', {
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!refreshToken,
+      hasUser: !!user
+    });
+
     if (accessToken && refreshToken && user) {
-      console.log('User found, restoring session...');
+      console.log('✅ User found, restoring session...');
       dispatch({
         type: VERIFY_OTP_SUCCESS,
-        payload: { accessToken, refreshToken, user },
+        payload: { 
+          accessToken, 
+          refreshToken, 
+          user 
+        },
       });
     } else {
-      console.log('No user found, staying on login screen');
+      console.log('❌ No user found, staying on login screen');
       dispatch({ type: AUTH_LOADING, payload: false });
     }
 
-    return true;
+    return { success: true };
   } catch (error) {
-    console.error('Check auth error:', error);
+    console.log('❌ Check auth error:', error);
     dispatch({ type: AUTH_LOADING, payload: false });
-    return false;
+    return { success: false };
   }
 };
 

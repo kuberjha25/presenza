@@ -4,6 +4,9 @@
 /Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/RelWithDebInfo/2nf3n1q6/arm64-v8a/rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir
 /Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/RelWithDebInfo/2nf3n1q6/arm64-v8a/rnasyncstorage_autolinked_build/CMakeFiles/edit_cache.dir
 /Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/RelWithDebInfo/2nf3n1q6/arm64-v8a/rnasyncstorage_autolinked_build/CMakeFiles/rebuild_cache.dir
+/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/RelWithDebInfo/2nf3n1q6/arm64-v8a/RNCNetInfoSpec_autolinked_build/CMakeFiles/react_codegen_RNCNetInfoSpec.dir
+/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/RelWithDebInfo/2nf3n1q6/arm64-v8a/RNCNetInfoSpec_autolinked_build/CMakeFiles/edit_cache.dir
+/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/RelWithDebInfo/2nf3n1q6/arm64-v8a/RNCNetInfoSpec_autolinked_build/CMakeFiles/rebuild_cache.dir
 /Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/RelWithDebInfo/2nf3n1q6/arm64-v8a/RNImagePickerSpec_autolinked_build/CMakeFiles/react_codegen_RNImagePickerSpec.dir
 /Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/RelWithDebInfo/2nf3n1q6/arm64-v8a/RNImagePickerSpec_autolinked_build/CMakeFiles/edit_cache.dir
 /Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/RelWithDebInfo/2nf3n1q6/arm64-v8a/RNImagePickerSpec_autolinked_build/CMakeFiles/rebuild_cache.dir

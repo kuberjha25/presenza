@@ -26,7 +26,7 @@ export const saveTokens = async (accessToken, refreshToken, user) => {
 
     return true;
   } catch (error) {
-    console.error('❌ Error saving tokens:', error);
+    console.log('❌ Error saving tokens:', error);
     return false;
   }
 };
@@ -35,10 +35,10 @@ export const saveTokens = async (accessToken, refreshToken, user) => {
 export const getAccessToken = async () => {
   try {
     const token = await AsyncStorage.getItem(SERVICE_ID);
-    console.log('🔑 Access token retrieved:', !!token);
+    console.log('🔑 Access token retrieved:', token);
     return token;
   } catch (error) {
-    console.error('❌ Error getting access token:', error);
+    console.log('❌ Error getting access token:', error);
     return null;
   }
 };
@@ -48,7 +48,7 @@ export const getRefreshToken = async () => {
   try {
     return await AsyncStorage.getItem(REFRESH_SERVICE_ID);
   } catch (error) {
-    console.error('❌ Error getting refresh token:', error);
+    console.log('❌ Error getting refresh token:', error);
     return null;
   }
 };
@@ -59,7 +59,7 @@ export const getUser = async () => {
     const userData = await EncryptedStorage.getItem('user_data');
     return userData ? JSON.parse(userData) : null;
   } catch (error) {
-    console.error('❌ Error getting user:', error);
+    console.log('❌ Error getting user:', error);
     return null;
   }
 };
@@ -79,7 +79,7 @@ export const debugStorage = async () => {
 
     return true;
   } catch (error) {
-    console.error('Debug error:', error);
+    console.log('Debug error:', error);
     return false;
   }
 };
@@ -96,7 +96,7 @@ export const forceClearTokens = async () => {
     console.log('✅ All tokens cleared');
     return true;
   } catch (error) {
-    console.error('❌ Force clear failed:', error);
+    console.log('❌ Force clear failed:', error);
     return false;
   }
 };
@@ -113,7 +113,7 @@ export const clearTokens = async () => {
     console.log('✅ Tokens cleared');
     return true;
   } catch (error) {
-    console.error('❌ Error clearing tokens:', error);
+    console.log('❌ Error clearing tokens:', error);
     return await forceClearTokens();
   }
 };
@@ -130,7 +130,7 @@ export const resetEverything = async () => {
     console.log('✅ Everything reset');
     return true;
   } catch (error) {
-    console.error('❌ Reset failed:', error);
+    console.log('❌ Reset failed:', error);
     return false;
   }
 };

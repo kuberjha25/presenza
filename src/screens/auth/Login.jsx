@@ -1,152 +1,85 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   KeyboardAvoidingView,
   Platform,
-  Animated,
   StatusBar,
   StyleSheet,
-  TouchableOpacity,
   Text,
   Keyboard,
+  ScrollView,
+  TouchableOpacity,
 } from 'react-native';
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from 'react-native-responsive-screen';
 import { useDispatch, useSelector } from 'react-redux';
-import { Fingerprint } from 'lucide-react-native';
-import { Colors, Fonts, GlobalText } from '../../utils/GlobalText';
+import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
+import { Colors, Fonts } from '../../utils/GlobalText';
 import LogoHeader from '../../components/Login/LogoHeader';
 import WelcomeText from '../../components/Login/WelcomeText';
 import FloatingLabelInput from '../../components/common/FloatingLabelInput';
 import PrimaryButton from '../../components/common/PrimaryButton';
 import SlideableAlert from '../../components/common/SlideableAlert';
-import {
-  sendOtp,
-  biometricLogin,
-  hideAlert,
-  checkBiometricAvailability,
-} from '../../store/actions/authActions';
-import { getAccessToken } from '../../utils/keychainHelper';
+import { sendOtp, hideAlert } from '../../store/actions/authActions';
+import { Settings } from 'lucide-react-native';
 
 const LoginScreen = ({ navigation }) => {
   const dispatch = useDispatch();
+  const { theme } = useTheme();
+  const { t } = useLanguage();
+  const C = theme.colors;
 
-  const {
-    sendOtpLoading,
-    sendOtpSuccess,
-    biometricAvailable,
-    biometricLoading,
-  } = useSelector(state => state.auth);
-
+  const { sendOtpLoading, sendOtpSuccess } = useSelector(state => state.auth);
   const { alert } = useSelector(state => state.ui);
 
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState('');
-  const [showBiometric, setShowBiometric] = useState(false);
-  
-  useEffect(() => {
-    async function checkTokens() {
-      const hasTokens = await getAccessToken();
-      console.log('🔍 Checking tokens on app start:', hasTokens);
-      if (hasTokens) {
-        setShowBiometric(true);
-      } else {
-        console.log('🚪 No tokens');
-      }
-    }
-    checkTokens();
-  }, []);
-
-  // const getCredentialsFromKeychain = async () => {
-  //   try {
-  //     const credentials = await Keychain.getInternetCredentials(
-  //       'com.presenza.app',
-  //     );
-  //     if (credentials) {
-  //       return JSON.parse(credentials.password);
-  //     }
-  //     return null;
-  //   } catch (error) {
-  //     console.error('Get credentials error:', error);
-  //     return null;
-  //   }
-  // };
-
-  // useEffect(() => {
-  //   async function fetchData() {
-  //     const hasCreds = await getCredentialsFromKeychain();
-  //     console.log('🔍 Checking tokens on app start:', hasCreds);
-  //     if (hasCreds) {
-  //       setShowBiometric(true);
-  //     } else {
-  //       console.log('🚪 No tokens');
-  //     }
-  //   }
-  //   fetchData();
-  // }, [showBiometric]);
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(hp('3%'))).current;
 
   useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 600,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-
-  useEffect(() => {
-    dispatch(checkBiometricAvailability());
+    console.log('🔐 LoginScreen mounted');
+    return () => console.log('🔐 LoginScreen unmounted');
   }, []);
 
   useEffect(() => {
     if (sendOtpSuccess && email) {
-      setTimeout(() => {
-        navigation.navigate('Verify_Otp', {
-          email: email.trim().toLowerCase(),
-        });
-      }, 500);
+      console.log('📧 OTP sent successfully, navigating to verification');
+      navigation.navigate('Verify_Otp', {
+        email: email.trim().toLowerCase(),
+      });
     }
-  }, [sendOtpSuccess, email]);
+  }, [sendOtpSuccess, email, navigation]);
 
-  const validateEmail = email => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const validateEmail = email => {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
 
   const handleSendOtp = async () => {
     Keyboard.dismiss();
     setEmailError('');
+
     if (!validateEmail(email)) {
-      setEmailError(GlobalText.alerts.invalidEmail);
+      setEmailError(t.alerts.invalidEmail);
       return;
     }
+
+    console.log('📤 Sending OTP for email:', email);
     await dispatch(sendOtp(email));
   };
 
-  const handleBiometric = async () => {
-    const result = await dispatch(biometricLogin());
-    if (result.success) {
-      navigation.replace('Home');
-    }
-  };
-
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
+    // Outermost View is the true full-screen container — NOT KeyboardAvoidingView.
+    // This ensures the decorative shadows are anchored to the screen, not the keyboard layout.
+    <View style={[styles.rootContainer, { backgroundColor: C.background }]}>
+      <StatusBar barStyle={C.statusBar} backgroundColor={C.background} />
 
-      <View style={styles.topShadow} />
-      <View style={styles.bottomShadow} />
+      {/* Background decorative blobs — rendered outside KAV so they never move */}
+      <View style={[styles.topShadow, { backgroundColor: C.topShadow }]} />
+      <View
+        style={[styles.bottomShadow, { backgroundColor: C.bottomShadow }]}
+      />
 
       <SlideableAlert
         visible={alert.visible}
@@ -155,104 +88,125 @@ const LoginScreen = ({ navigation }) => {
         onDismiss={() => dispatch(hideAlert())}
       />
 
-      <Animated.View
-        style={[
-          styles.content,
-          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-        ]}
+      {/* KeyboardAvoidingView only wraps the interactive content */}
+      <KeyboardAvoidingView
+        style={styles.kavContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <LogoHeader />
-        <WelcomeText />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          <LogoHeader />
+          <WelcomeText />
 
-        <View style={styles.formContainer}>
-          <FloatingLabelInput
-            label={GlobalText.login.emailLabel}
-            value={email}
-            onChangeText={text => {
-              setEmail(text);
-              setEmailError('');
-            }}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            maxLength={50}
-            placeholder={GlobalText.login.emailPlaceholder}
-            placeholderTextColor={Colors.textSecondary}
-          />
-          {emailError && <Text style={styles.errorText}>{emailError}</Text>}
-
-          <PrimaryButton
-            title={GlobalText.login.sendOtpButton}
-            onPress={handleSendOtp}
-            loading={sendOtpLoading}
-            disabled={!validateEmail(email) || sendOtpLoading}
-          />
-
-          {biometricAvailable && showBiometric && (
-            <TouchableOpacity
-              style={styles.biometricOption}
-              onPress={handleBiometric}
-              disabled={biometricLoading}
-            >
-              <Fingerprint size={wp('5%')} color={Colors.primary} />
-              <Text style={styles.biometricText}>
-                {biometricLoading ? 'Checking...' : 'Login with Biometric'}
+          <View style={styles.formContainer}>
+            <FloatingLabelInput
+              label={t.login.emailLabel}
+              value={email}
+              onChangeText={text => {
+                setEmail(text);
+                setEmailError('');
+              }}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              maxLength={50}
+              placeholder={t.login.emailPlaceholder}
+              placeholderTextColor={C.textSecondary}
+            />
+            {emailError ? (
+              <Text style={[styles.errorText, { color: C.error }]}>
+                {emailError}
               </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </Animated.View>
-    </KeyboardAvoidingView>
+            ) : null}
+
+            <PrimaryButton
+              title={t.login.sendOtpButton}
+              onPress={handleSendOtp}
+              loading={sendOtpLoading}
+              disabled={!validateEmail(email) || sendOtpLoading}
+            />
+          </View>
+        </ScrollView>
+        <TouchableOpacity
+          style={[styles.settingsButton, { backgroundColor: C.primary }]}
+          onPress={() => navigation.navigate('Settings', { fromAuth: true })}
+        >
+          <Settings size={wp('5%')} color={C.textDark} />
+        </TouchableOpacity>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
+  // True root: fills the screen, holds the fixed decorative layers
+  rootContainer: {
+    flex: 1,
+  },
+  settingsButton: {
+    position: 'absolute',
+    bottom: hp('4%'),
+    right: wp('6%'),
+    width: wp('14%'),
+    height: wp('14%'),
+    borderRadius: wp('7%'),
+    justifyContent: 'center',
+    alignItems: 'center',
+
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  // Top-right decorative blob
   topShadow: {
     position: 'absolute',
     top: -hp('1%'),
     right: -wp('2%'),
-    backgroundColor: '#0b1425',
     opacity: 0.9,
     width: wp('90%'),
     height: hp('35%'),
     borderBottomLeftRadius: wp('25%'),
   },
+  // Bottom-left decorative blob
   bottomShadow: {
     position: 'absolute',
-    bottom: -hp('1%'),
+    bottom: -hp('10%'),
     left: -wp('2%'),
-    backgroundColor: Colors.primary,
-    opacity: 0.5,
-    width: wp('75%'),
+    opacity: 0.4,
+    width: wp('90%'),
     height: hp('35%'),
     borderTopRightRadius: wp('50%'),
   },
-  content: {
+  // KAV fills remaining space without affecting sibling positioned elements
+  kavContainer: {
+    flex: 1,
+  },
+  scrollView: {
     flex: 1,
     paddingHorizontal: wp('6%'),
-    justifyContent: 'center',
   },
-  formContainer: { width: '100%', marginBottom: hp('4%') },
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop: hp('20%'),
+    paddingBottom: hp('6%'),
+  },
+  formContainer: {
+    width: '100%',
+    marginTop: hp('2%'),
+    marginBottom: hp('4%'),
+  },
   errorText: {
-    color: Colors.error,
     fontSize: wp('3%'),
     fontFamily: Fonts.light,
     marginTop: -hp('1%'),
     marginBottom: hp('1%'),
     marginLeft: wp('2%'),
-  },
-  biometricOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: hp('2%'),
-    padding: hp('1%'),
-    gap: wp('2%'),
-  },
-  biometricText: {
-    color: Colors.textSecondary,
-    fontSize: wp('3.5%'),
-    fontFamily: Fonts.light,
   },
 });
 

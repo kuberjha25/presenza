@@ -32,7 +32,7 @@ export const AuthProvider = ({ children }) => {
         setPuchInData(JSON.parse(storedPucnchInData));
       }
     } catch (err) {
-      console.error('Auth load error', err);
+      console.log('Auth load error', err);
     } finally {
       setLoading(false);
     }

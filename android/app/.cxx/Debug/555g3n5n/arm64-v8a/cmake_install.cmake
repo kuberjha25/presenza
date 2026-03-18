@@ -45,6 +45,7 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/Debug/555g3n5n/arm64-v8a/rnasyncstorage_autolinked_build/cmake_install.cmake")
+  include("/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/Debug/555g3n5n/arm64-v8a/RNCNetInfoSpec_autolinked_build/cmake_install.cmake")
   include("/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/Debug/555g3n5n/arm64-v8a/RNImagePickerSpec_autolinked_build/cmake_install.cmake")
   include("/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/Debug/555g3n5n/arm64-v8a/RNKeychainSpec_autolinked_build/cmake_install.cmake")
   include("/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/Debug/555g3n5n/arm64-v8a/RNPermissionsSpec_autolinked_build/cmake_install.cmake")

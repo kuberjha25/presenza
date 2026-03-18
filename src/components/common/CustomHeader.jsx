@@ -1,3 +1,4 @@
+// src/components/common/CustomHeader.jsx
 import React from 'react';
 import {
   View,
@@ -7,6 +8,7 @@ import {
   StyleSheet,
   StatusBar,
   Alert,
+  Platform,
 } from 'react-native';
 import {
   widthPercentageToDP as wp,
@@ -14,7 +16,9 @@ import {
 } from 'react-native-responsive-screen';
 import { useNavigation } from '@react-navigation/native';
 import { ArrowLeft, Power } from 'lucide-react-native';
-import { Colors, Fonts, GlobalText } from '../../utils/GlobalText';
+import { useTheme } from '../../context/ThemeContext';
+import { useLanguage } from '../../context/LanguageContext';
+import { Fonts } from '../../utils/GlobalText';
 import logo from '../../assets/logo.png';
 import { useDispatch } from 'react-redux';
 import { logout } from '../../store/actions/authActions';
@@ -22,13 +26,15 @@ import { logout } from '../../store/actions/authActions';
 const CustomHeader = ({
   title,
   showBack = false,
-  showMenu = true,
   onMenuPress,
   rightComponent,
-  backgroundColor = '#1C2541',
+  backgroundColor,
 }) => {
   const navigation = useNavigation();
   const dispatch = useDispatch();
+  const { theme } = useTheme();
+  const { t } = useLanguage();
+  const C = theme.colors;
 
   const handleBack = () => {
     if (navigation.canGoBack()) {
@@ -38,12 +44,12 @@ const CustomHeader = ({
 
   const handleLogout = () => {
     Alert.alert(
-      GlobalText.buttons.logout || 'Logout',
-      GlobalText.alerts.logoutConfirm || 'Are you sure you want to logout?',
+      t.buttons.logout,
+      t.alerts.logoutConfirm,
       [
-        { text: GlobalText.buttons.cancel || 'Cancel', style: 'cancel' },
+        { text: t.buttons.cancel, style: 'cancel' },
         {
-          text: GlobalText.buttons.logout || 'Logout',
+          text: t.buttons.logout,
           onPress: async () => await dispatch(logout()),
           style: 'destructive',
         },
@@ -54,33 +60,33 @@ const CustomHeader = ({
 
   return (
     <>
-      <StatusBar barStyle="light-content" backgroundColor={backgroundColor} />
-      <View style={[styles.container, { backgroundColor }]}>
+      <StatusBar barStyle={C.statusBar} backgroundColor={backgroundColor || C.headerBg} />
+      <View style={[styles.container, { backgroundColor: backgroundColor || C.headerBg }]}>
         {/* Left Section */}
         <View style={styles.leftSection}>
           {showBack ? (
             <TouchableOpacity onPress={handleBack} style={styles.iconButton}>
-              <ArrowLeft size={wp('5%')} color="#fff" />
+              <ArrowLeft size={wp('5%')} color={C.textPrimary} />
             </TouchableOpacity>
           ) : (
             <View style={styles.logoSection}>
-              <Image source={logo} style={styles.logo} />
-              <Text style={styles.appName}>Presenza</Text>
+              <Image source={logo} style={[styles.logo, { borderColor: C.primary }]} />
+              <Text style={[styles.appName, { color: C.primary }]}>Presenza</Text>
             </View>
           )}
         </View>
 
         {/* Center Section (Optional Title) */}
-        {title && (
+        {title && title !== 'Home' && (
           <View style={styles.centerSection}>
-            {title !== 'Home' && <Text style={styles.title}>{title}</Text>}
+            <Text style={[styles.title, { color: C.textPrimary }]}>{title}</Text>
           </View>
         )}
 
         {/* Right Section */}
         <View style={styles.rightSection}>
           <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
-            <Power size={wp('5.5%')} color={Colors.error} />
+            <Power size={wp('5.5%')} color={C.error} />
           </TouchableOpacity>
           {rightComponent}
         </View>
@@ -97,7 +103,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: wp('4%'),
     paddingTop: Platform.OS === 'ios' ? hp('5%') : hp('4%'),
     borderBottomWidth: 1,
-    backgroundColor: '#1C2541',
+    borderBottomColor: 'transparent',
   },
   leftSection: {
     flex: 1,
@@ -123,16 +129,15 @@ const styles = StyleSheet.create({
     width: wp('5%'),
     height: wp('5%'),
     borderRadius: wp('50%'),
+    borderWidth: 1,
     resizeMode: 'cover',
   },
   appName: {
-    color: Colors.primary,
     fontSize: wp('4%'),
     fontFamily: Fonts.medium,
     letterSpacing: wp('0.1%'),
   },
   title: {
-    color: Colors.secondary,
     fontSize: wp('4.5%'),
     fontFamily: Fonts.medium,
   },

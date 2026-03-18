@@ -1,6 +1,7 @@
 {
   "buildFiles": [
     "/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/node_modules/@react-native-community/netinfo/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/node_modules/react-native-keychain/android/build/generated/source/codegen/jni/CMakeLists.txt",
     "/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/node_modules/react-native-permissions/android/build/generated/source/codegen/jni/CMakeLists.txt",
@@ -81,6 +82,11 @@
         "/Users/kuberjha/.gradle/caches/8.13/transforms/3d4a9692ce15564fe2756ee11a3f3688/transformed/jetified-react-android-0.83.1-release/prefab/modules/jsi/libs/android.arm64-v8a/libjsi.so",
         "/Users/kuberjha/.gradle/caches/8.13/transforms/ccfc3246f5272e5ce1131cac039a6724/transformed/jetified-fbjni-0.7.0/prefab/modules/fbjni/libs/android.arm64-v8a/libfbjni.so"
       ]
+    },
+    "react_codegen_RNCNetInfoSpec::@c36c96bfd5b5770618a5": {
+      "artifactName": "react_codegen_RNCNetInfoSpec",
+      "abi": "arm64-v8a",
+      "runtimeFiles": []
     },
     "react_codegen_rnasyncstorage::@1596841e19ec5b9eeffe": {
       "artifactName": "react_codegen_rnasyncstorage",

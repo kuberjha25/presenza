@@ -1,9 +1,11 @@
+// src/components/layout/MainLayout.jsx
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from 'react-native-responsive-screen';
+import { useTheme } from '../../context/ThemeContext';
 import CustomHeader from '../common/CustomHeader';
 import BottomNavigator from '../common/BottomNavigator';
 
@@ -13,12 +15,15 @@ const MainLayout = ({
   showBack = false,
   showMenu = false,
   headerRightComponent,
-  headerBackgroundColor = '#000000',
+  headerBackgroundColor,
   hideBottomNav = false,
   onMenuPress
 }) => {
+  const { theme } = useTheme();
+  const C = theme.colors;
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: C.background }]}>
       {/* Header */}
       <CustomHeader
         title={title}
@@ -26,7 +31,7 @@ const MainLayout = ({
         showMenu={showMenu}
         onMenuPress={onMenuPress}
         rightComponent={headerRightComponent}
-        backgroundColor={headerBackgroundColor}
+        backgroundColor={headerBackgroundColor || C.headerBg}
       />
 
       {/* Content */}
@@ -47,7 +52,6 @@ const MainLayout = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B1220',
   },
   scrollView: {
     flex: 1,

@@ -1,12 +1,16 @@
 import { combineReducers } from 'redux';
 import authReducer from './authReducer';
-import attendanceReducer from './attendanceReducer'; // Add this
+import attendanceReducer from './attendanceReducer'; 
 import uiReducer from './uiReducer';
+import leaveReducer from './leaveReducer';
+import { employeeProfileReducer } from './employeeReducer';
 
 const appReducer = combineReducers({
   auth: authReducer,
-  attendance: attendanceReducer, // Add this
+  attendance: attendanceReducer, 
   ui: uiReducer,
+  leave: leaveReducer,
+    employeeProfile: employeeProfileReducer,
 });
 
 const rootReducer = (state, action) => {

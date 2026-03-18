@@ -1,5 +1,57 @@
-export const BASE_URL = 'http://103.171.97.71/api/v1';
+// GlobalText.js — Single source of truth for colors, fonts, and base URL
+// Theme colors are now driven by ThemeContext — import useTheme() in components
+// Language strings are driven by LanguageContext — import useLanguage() in components
 
+export const BASE_URL = 'http://103.171.97.71/api/v1';
+const GOOGLE_API_KEY = 'AIzaSyBq2vZw0vfoiTSm2DypMQ6-odWpsJYLCEc';
+
+// ══════════════════════════════════════════════════════════
+// STATIC FONTS (unchanged regardless of theme)
+// ══════════════════════════════════════════════════════════
+export const Fonts = {
+  medium: 'GothamMedium',
+  light: 'GothamLight',
+  regular: 'GothamBook',
+  bold: 'GothamBold',
+};
+
+// ══════════════════════════════════════════════════════════
+// DEFAULT COLORS (Dark Theme — used as fallback before context loads)
+// These are replaced at runtime by ThemeContext
+// ══════════════════════════════════════════════════════════
+export const Colors = {
+  primary: '#FACC15',
+  otpBorder: '#68644e',
+  secondary: '#FEE440',
+  background: '#0A1128',
+  surface: 'rgba(38, 50, 86, 0.66)',
+  surfaceSolid: '#1C2541',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#9CA3AF',
+  textDark: '#0A1128',
+  disabled: '#69778a',
+  success: '#10B981',
+  error: '#ff5656',
+  warning: '#F59E0B',
+  info: '#3B82F6',
+  border: '#ffffff1f',
+  shadow: '#000000',
+  icon: '#FEE440',
+  iconTitle: '#CBD5E1',
+  cardBg: 'rgba(38, 50, 86, 0.66)',
+  headerBg: '#1C2541',
+  bottomNavBg: '#111827',
+  inputBg: '#0A1128',
+  inputBorder: '#ffffff1f',
+  statusBar: 'light-content',
+  overlayBg: 'rgba(0,0,0,0.7)',
+  topShadow: '#0b1425',
+  bottomShadow: '#FACC15',
+};
+
+// ══════════════════════════════════════════════════════════
+// STATIC TEXT (English fallback — replaced by LanguageContext at runtime)
+// ══════════════════════════════════════════════════════════
 export const GlobalText = {
   login: {
     title: 'Welcome Back',
@@ -27,26 +79,6 @@ export const GlobalText = {
     leaveManagement: 'Leave',
     reports: 'Reports',
   },
-  dashboard: {
-    welcome: 'Welcome, {name}!',
-    checkIn: 'Check In',
-    checkOut: 'Check Out',
-    lastCheckIn: 'Last Check-In: {time}',
-    lastCheckOut: 'Last Check-Out: {time}',
-    attendanceSummary: 'Attendance Summary',
-    present: 'Present',
-    absent: 'Absent',
-    leave: 'Leave',
-  },
-  punch: {
-    title: 'Daily Punch-In / Punch-Out',
-    subtitle: 'Complete multi-step verification to mark attendance',
-    startButton: 'Start Punch In',
-    info: 'Please ensure you have good lighting and your face is clearly visible',
-    locationStep: 'Location',
-    cameraStep: 'Camera',
-    uploadStep: 'Upload',
-  },
   attendance: {
     currentStatus: 'CURRENT STATUS',
     notPunched: 'Not Punched In',
@@ -58,13 +90,9 @@ export const GlobalText = {
     active: 'ACTIVE',
     verificationSteps: 'VERIFICATION STEPS',
     locationStep: 'Location',
-    cameraStep: 'Camera',
-    verifyStep: 'Verify',
-    uploading: 'Uploading',
-    defaultLocation: 'HO - Chandigarh',
-    locationStep: 'Location',
     selfieStep: 'Selfie',
     uploadStep: 'Upload',
+    defaultLocation: 'HO - Chandigarh',
   },
   alerts: {
     invalidEmail: 'Please enter a valid email address.',
@@ -88,31 +116,4 @@ export const GlobalText = {
     verify: 'Verify',
     send: 'Send',
   },
-};
-
-export const Colors = {
-  primary: '#FACC15',
-  otpBorder: '#68644e',
-  secondary: '#FEE440',
-  background: '#0A1128',
-  surface: 'rgba(38, 50, 86, 0.66)',
-  textPrimary: '#FFFFFF',
-  textSecondary: '#9CA3AF',
-  textDark: '#0A1128',
-  disabled: '#69778a',
-  success: '#10B981',
-  error: '#ff5656',
-  warning: '#F59E0B',
-  info: '#3B82F6',
-  border: '#ffffff1f',
-  shadow: '#000000',
-  icon: '#FEE440',
-  iconTitle: '#CBD5E1',
-};
-
-export const Fonts = {
-  medium: 'GothamMedium',
-  light: 'GothamLight',
-  regular: 'GothamBook',
-  bold: 'GothamBold',
 };

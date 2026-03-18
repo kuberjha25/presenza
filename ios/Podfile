@@ -15,10 +15,17 @@ target 'Presenza' do
 
   use_react_native!(
     :path => config[:reactNativePath],
-    :app_path => "#{Pod::Config.instance.installation_root}/.."
+    :app_path => "#{Pod::Config.instance.installation_root}/..",
+    :fabric_enabled => false  # 👈 ADD THIS LINE - Disable New Architecture
   )
 
-  # 👇 ADD THIS
+  # pod 'GoogleMaps'
+  # pod 'Google-Maps-iOS-Utils'
+
+  # rn_maps_path = '../node_modules/react-native-maps'
+  # pod 'react-native-maps', path: rn_maps_path
+
+  # Permissions setup
   setup_permissions([
     'LocationWhenInUse',
     'Camera',
