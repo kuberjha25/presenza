@@ -141,7 +141,7 @@ const LoginScreen = ({ navigation }) => {
         </ScrollView>
         <TouchableOpacity
           style={[styles.settingsButton, { backgroundColor: C.primary }]}
-          onPress={() => navigation.navigate('Settings', { fromAuth: true })}
+          onPress={() => navigation.navigate('AuthSettings', { fromAuth: true })}
         >
           <Settings size={wp('5%')} color={C.textDark} />
         </TouchableOpacity>

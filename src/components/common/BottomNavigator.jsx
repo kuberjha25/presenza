@@ -52,7 +52,7 @@ const BottomNavigator = () => {
       name: 'Settings',
       icon: Settings,
       label: t.nav.settings,
-      route: 'Settings',
+      route: 'AppSettings',
     }
   ];
 

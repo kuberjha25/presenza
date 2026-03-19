@@ -22,7 +22,7 @@ const AuthStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="Login" component={LoginScreen} />
     <Stack.Screen name="Verify_Otp" component={VerifyOTP} />
-    <Stack.Screen name='Settings' component={SettingsScreen}/>
+    <Stack.Screen name="AuthSettings" component={SettingsScreen} />
   </Stack.Navigator>
 );
 
@@ -33,7 +33,7 @@ const AppStack = () => (
     <Stack.Screen name="DailyPuch" component={DailyPunch} />
     <Stack.Screen name="Reports" component={ReportsScreen} />
     <Stack.Screen name="Leave" component={LeaveScreen} />
-    <Stack.Screen name='Settings' component={SettingsScreen}/>
+    <Stack.Screen name="AppSettings" component={SettingsScreen} />
   </Stack.Navigator>
 );
 
@@ -56,6 +56,9 @@ const AppNavigator = () => {
     return <AppLoader />;
   }
 
+  // AppNavigator
+  console.log('🚦 NAV STATE:', { isAuthenticated, loading });
+
   return (
     <View style={styles.container}>
       {/* 
@@ -63,7 +66,7 @@ const AppNavigator = () => {
         When this value flips (login/logout), React unmounts the old stack
         and mounts the new one — no manual navigation.reset() needed.
       */}
-      {isAuthenticated ? <AppStack /> : <AuthStack />}
+      {isAuthenticated ? <AppStack key="app" /> : <AuthStack key="auth" />}
 
       <SlideableAlert
         visible={alert.visible}

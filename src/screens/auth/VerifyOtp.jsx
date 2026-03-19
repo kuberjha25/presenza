@@ -36,7 +36,7 @@ import {
 } from '../../store/actions/authActions';
 
 const VerifyOTP = ({ route, navigation }) => {
-  const { employeeId } = route.params; // Changed from email to employeeId
+  const { employeeId } = route.params; 
   const dispatch = useDispatch();
   const { theme } = useTheme();
   const { t } = useLanguage();
@@ -96,7 +96,7 @@ const VerifyOTP = ({ route, navigation }) => {
     }
 
     console.log('🔑 Verifying OTP for employee ID:', employeeId);
-    const result = await dispatch(verifyOtp(employeeId, otpString)); // Pass employeeId instead of email
+    const result = await dispatch(verifyOtp(employeeId, otpString)); 
 
     if (result.success) {
       console.log('✅ OTP verified successfully');
@@ -112,7 +112,7 @@ const VerifyOTP = ({ route, navigation }) => {
     if (!canResend) return;
 
     console.log('📧 Resending OTP for employee ID:', employeeId);
-    const result = await dispatch(resendOtp(employeeId)); // Pass employeeId instead of email
+    const result = await dispatch(resendOtp(employeeId)); 
     if (result.success) {
       setTimer(30);
       setDisabledd(false);
@@ -229,7 +229,7 @@ const VerifyOTP = ({ route, navigation }) => {
         </Animated.View>
         <TouchableOpacity
           style={[styles.settingsButton, { backgroundColor: C.primary }]}
-          onPress={() => navigation.navigate('Settings', { fromAuth: true })}
+          onPress={() => navigation.navigate('AuthSettings', { fromAuth: true })}
         >
           <Settings size={wp('5%')} color={C.textDark} />
         </TouchableOpacity>

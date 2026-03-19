@@ -83,12 +83,12 @@ export const initBiometrics = () => async dispatch => {
 };
 
 // ==================== SEND OTP ACTIONS ====================
-export const sendOtp = email => async dispatch => {
+export const sendOtp = emp => async dispatch => {
   try {
     dispatch({ type: SEND_OTP_REQUEST });
 
     const payload = {
-      email: email.trim().toLowerCase(),
+      employeeCode: emp.trim(),
       device: {
         deviceId: await DeviceInfo.getUniqueId(),
         deviceType: 'MOBILE',
@@ -114,14 +114,14 @@ export const sendOtp = email => async dispatch => {
 
     dispatch({
       type: SEND_OTP_SUCCESS,
-      payload: { email: email.trim().toLowerCase(), message: data.message },
+      payload: { employeeCode: emp.trim(), message: data.message },
     });
 
     dispatch(setAlert('OTP sent successfully', 'success'));
     return {
       success: true,
       step: data.step,
-      email: email.trim().toLowerCase(),
+      employeeCode: emp.trim(),
     };
   } catch (error) {
     console.log('Send OTP error:', error);
@@ -135,12 +135,12 @@ export const sendOtp = email => async dispatch => {
 };
 
 // ==================== RESEND OTP ACTIONS ====================
-export const resendOtp = email => async dispatch => {
+export const resendOtp = emp => async dispatch => {
   try {
     dispatch({ type: SEND_OTP_REQUEST });
 
     const payload = {
-      email: email.trim().toLowerCase(),
+      employeeCode: emp.trim().toLowerCase(),
       device: {
         deviceId: await DeviceInfo.getUniqueId(),
         deviceType: 'MOBILE',
@@ -165,7 +165,7 @@ export const resendOtp = email => async dispatch => {
 
     dispatch({
       type: SEND_OTP_SUCCESS,
-      payload: { email: email.trim().toLowerCase() },
+      payload: { employeeCode: emp.trim().toLowerCase() },
     });
 
     return { success: true };
@@ -180,14 +180,14 @@ export const resendOtp = email => async dispatch => {
 };
 
 // ==================== VERIFY OTP ACTIONS ====================
-export const verifyOtp = (email, otp) => async dispatch => {
+export const verifyOtp = (employeeCode, otp) => async dispatch => {
   try {
     dispatch({ type: VERIFY_OTP_REQUEST });
 
     const response = await fetch(`${BASE_URL}/auth/verify-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, otp }),
+      body: JSON.stringify({ employeeCode, otp }),
     });
 
     const data = await response.json();
@@ -237,12 +237,12 @@ export const biometricLogin = () => async dispatch => {
 
     const { available } = await rnBiometrics.isSensorAvailable();
     console.log('📱 Biometric available:', available);
-    
+
     if (!available) {
       console.log('❌ Biometric not available');
-      dispatch({ 
-        type: BIOMETRIC_LOGIN_FAIL, 
-        payload: 'Biometric not available' 
+      dispatch({
+        type: BIOMETRIC_LOGIN_FAIL,
+        payload: 'Biometric not available',
       });
       return { success: false };
     }
@@ -256,9 +256,9 @@ export const biometricLogin = () => async dispatch => {
 
     if (!success) {
       console.log('❌ Biometric authentication failed');
-      dispatch({ 
-        type: BIOMETRIC_LOGIN_FAIL, 
-        payload: 'Biometric authentication failed' 
+      dispatch({
+        type: BIOMETRIC_LOGIN_FAIL,
+        payload: 'Biometric authentication failed',
       });
       return { success: false };
     }
@@ -267,7 +267,7 @@ export const biometricLogin = () => async dispatch => {
     const accessToken = await getAccessToken();
     const refreshToken = await getRefreshToken();
     const user = await getUser();
-    
+
     console.log('📦 Credentials found:', !!accessToken);
 
     if (accessToken && refreshToken && user) {
@@ -280,9 +280,9 @@ export const biometricLogin = () => async dispatch => {
     }
 
     console.log('❌ No access token found');
-    dispatch({ 
-      type: BIOMETRIC_LOGIN_FAIL, 
-      payload: 'No saved credentials found' 
+    dispatch({
+      type: BIOMETRIC_LOGIN_FAIL,
+      payload: 'No saved credentials found',
     });
     return { success: false };
   } catch (error) {
@@ -336,7 +336,7 @@ export const logout = () => async dispatch => {
     console.log('🚪 Logout started...');
 
     const accessToken = await getAccessToken();
-    
+
     if (accessToken) {
       try {
         await fetch(`${BASE_URL}/auth/logout`, {
@@ -427,7 +427,7 @@ export const resetAppState = () => ({
 export const checkAuthState = () => async dispatch => {
   try {
     console.log('🔍 Checking auth state...');
-    
+
     // Pehle loading true karo
     dispatch({ type: AUTH_LOADING, payload: true });
 
@@ -438,22 +438,18 @@ export const checkAuthState = () => async dispatch => {
     console.log('📦 Storage check:', {
       hasAccessToken: !!accessToken,
       hasRefreshToken: !!refreshToken,
-      hasUser: !!user
+      hasUser: !!user,
     });
 
     if (accessToken && refreshToken && user) {
       console.log('✅ User found, restoring session...');
       dispatch({
         type: VERIFY_OTP_SUCCESS,
-        payload: { 
-          accessToken, 
-          refreshToken, 
-          user 
-        },
+        payload: { accessToken, refreshToken, user },
       });
     } else {
       console.log('❌ No user found, staying on login screen');
-      dispatch({ type: AUTH_LOADING, payload: false });
+      dispatch({ type: LOGOUT }); // ✅ THIS IS THE REAL FIX
     }
 
     return { success: true };
@@ -463,4 +459,3 @@ export const checkAuthState = () => async dispatch => {
     return { success: false };
   }
 };
-

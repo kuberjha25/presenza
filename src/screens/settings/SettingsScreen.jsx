@@ -1,5 +1,5 @@
 // src/screens/settings/SettingsScreen.jsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -24,7 +24,7 @@ import {
   ChevronRight,
   Check,
 } from 'lucide-react-native';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { logout } from '../../store/actions/authActions';
@@ -34,7 +34,7 @@ import DeviceInfo from 'react-native-device-info';
 import { ChevronLeft } from 'lucide-react-native';
 import { Platform } from 'react-native';
 
-const SettingsScreen = ({ route , navigation}) => {
+const SettingsScreen = ({ route, navigation }) => {
   const fromAuth = route?.params?.fromAuth;
   const dispatch = useDispatch();
   const { theme, themeMode, setTheme } = useTheme();
@@ -50,6 +50,7 @@ const SettingsScreen = ({ route , navigation}) => {
   const b = t?.buttons ?? {};
   const l = t?.leave ?? {}; // for department, employeeCode etc
 
+  // SettingsScreen.jsx
   const handleLogout = () => {
     Alert.alert(
       s.logout ?? 'Logout',
@@ -58,7 +59,9 @@ const SettingsScreen = ({ route , navigation}) => {
         { text: b.cancel ?? 'Cancel', style: 'cancel' },
         {
           text: b.logout ?? 'Logout',
-          onPress: async () => await dispatch(logout()),
+          onPress: async () => {
+            await dispatch(logout());
+          },
           style: 'destructive',
         },
       ],
@@ -605,12 +608,11 @@ const styles = StyleSheet.create({
   rowLabel: { fontSize: wp('3.5%'), fontFamily: Fonts.medium },
   rowDesc: { fontSize: wp('2.8%'), fontFamily: Fonts.regular, marginTop: 2 },
   rowValue: {
-    flex:1/2,
+    flex: 1 / 2,
     fontSize: wp('3%'),
     fontFamily: Fonts.regular,
     marginRight: wp('1%'),
     lineHeight: hp('2%'),
-
   },
 
   infoCard: {

@@ -84,3 +84,6 @@
 105	2189	1773836001267394388	CMakeFiles/appmodules.dir/OnLoad.cpp.o	6c7ac8b96a9b0d5
 105	7516	1773836006486820700	CMakeFiles/appmodules.dir/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/build/generated/autolinking/src/main/jni/autolinking.cpp.o	a0adfa789ffc2fc1
 7516	7825	1773836006865622768	/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/build/intermediates/cxx/Debug/555g3n5n/obj/arm64-v8a/libappmodules.so	1a57ea1816efaea5
+5	63	0	/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/Debug/555g3n5n/arm64-v8a/CMakeFiles/cmake.verify_globs	f8b665a7785e5eae
+5	50	0	/Users/kuberjha/Documents/paulfincare/pauledge/Sprenza/android/app/.cxx/Debug/555g3n5n/arm64-v8a/CMakeFiles/cmake.verify_globs	f8b665a7785e5eae
+0	65	0	clean	11ee7eee1a0eea50
