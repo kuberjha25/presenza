@@ -1281,11 +1281,11 @@ const getDayInfoForCalendar = (day, dateStr) => {
             </Text>
           </View>
         </View>
-        <View
+        {/* <View
           style={[styles.headerIcon, { backgroundColor: C.primary + '20' }]}
         >
          
-        </View>
+        </View> */}
       </View>
 
       <ScrollView
