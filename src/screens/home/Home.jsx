@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   RefreshControl,
   StatusBar,
-  Modal,
 } from 'react-native';
 import {
   widthPercentageToDP as wp,
@@ -32,9 +31,10 @@ import {
   CheckCircle2,
   AlertCircle,
   XCircle,
-  Phone,
-  Mail,
-  Briefcase,
+  Paperclip,
+  ReceiptText,
+  CalendarClock,
+  Key,
 } from 'lucide-react-native';
 import MainLayout from '../../components/layout/MainLayout';
 import { setAlert } from '../../store/actions/authActions';
@@ -43,7 +43,6 @@ import {
   punchOut,
   breakIn,
   breakOut,
-  logVisit,
 } from '../../store/actions/attendanceActions';
 import { useTheme } from '../../context/ThemeContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -57,6 +56,15 @@ import BreakReasonModal from '../../components/modals/BreakReasonModal';
 import VisitModal from '../../components/modals/Visitmodal';
 import ActiveTimeDisplay from '../../components/common/ActiveTimeDisplay';
 import { getEmployeeProfile } from '../../store/actions/employeeActions';
+
+// Import reusable components
+import StatusPill from '../../components/common/StatusPill';
+import QuickActionCard from '../../components/common/QuickActionCard';
+import StatItem from '../../components/common/StatItem';
+import BreakItem from '../../components/common/BreakItem';
+import AttendanceTable from '../../components/common/AttendanceTable';
+import AbsentCard from '../../components/common/AbsentCard';
+import ProfileModal from '../../components/modals/ProfileModal';
 
 const HomeScreen = ({ navigation }) => {
   const dispatch = useDispatch();
@@ -84,7 +92,7 @@ const HomeScreen = ({ navigation }) => {
   const timerRef = useRef(null);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
 
-  // ── Profile ──────────────────────────────────────────────
+  // Profile data
   const { profile } = useSelector(state => state.employeeProfile);
   const fullName = profile?.[0]?.fullName || '';
   const firstName = fullName.split(' ')[0] || 'Guest';
@@ -96,7 +104,7 @@ const HomeScreen = ({ navigation }) => {
 
   const isSalesTeam = department.toLowerCase().includes('sales');
 
-  // ── Attendance data ───────────────────────────────────────
+  // Attendance data
   const today = new Date().toISOString().split('T')[0];
   const todayRecord = history?.find(r => r.date.split('T')[0] === today);
   const sessions = todayRecord?.sessions || [];
@@ -224,6 +232,25 @@ const HomeScreen = ({ navigation }) => {
       return;
     }
 
+    if (label === t.home.reimbursement) {
+      navigation.navigate('Reimbursement');
+      return;
+    }
+
+    if (label === t.home.salarySlip) {
+      navigation.navigate('SalarySlip');
+      return;
+    }
+
+    if (label === t.home.meetings) {
+      navigation.navigate('Meetings');
+      return;
+    }
+    if (label === t.home.kra) {
+      navigation.navigate('KRA');
+      return;
+    }
+
     dispatch(
       setAlert(`✨ ${label} ${t.buttons.comingSoon || 'Coming Soon!'}`, 'info'),
     );
@@ -284,25 +311,6 @@ const HomeScreen = ({ navigation }) => {
       },
     ]);
   };
-
-  // const handleVisitSubmit = async visitData => {
-  //   try {
-  //     setIsProcessing(true);
-  //     const result = await dispatch(logVisit(visitData));
-  //     if (result?.success) {
-  //       setVisitModalVisible(false);
-  //       dispatch(
-  //         setAlert(result?.message || 'Visit logged successfully', 'success'),
-  //       );
-  //     } else {
-  //       dispatch(setAlert(result?.message || 'Failed to log visit', 'error'));
-  //     }
-  //   } catch {
-  //     dispatch(setAlert(t.alerts.serverError, 'error'));
-  //   } finally {
-  //     setIsProcessing(false);
-  //   }
-  // };
 
   const handlePunchOut = async () => {
     if (isProcessing || punchOutLoading) return;
@@ -466,6 +474,10 @@ const HomeScreen = ({ navigation }) => {
     { label: t.home.idleTracking, icon: Coffee, color: C.warning },
     { label: t.home.leaveManagement, icon: CalendarDays, color: C.success },
     { label: t.home.reports, icon: SquareChartGantt, color: C.info },
+    { label: t.home.salarySlip, icon: ReceiptText, color: C.secondary },
+    { label: t.home.reimbursement, icon: Paperclip, color: C.purple },
+    { label: t.home.meetings, icon: CalendarClock, color: C.pink },
+    { label: t.home.kra, icon: Key, color: C.rose },
   ];
 
   const formatOptions = [
@@ -512,7 +524,6 @@ const HomeScreen = ({ navigation }) => {
 
   const shouldShowPunchOut = () => isPunchedIn && !isOnBreak;
 
-  // Derive card border color once
   const cardBorderColor = isAbsent
     ? C.error + '30'
     : isHalfDay || isUserLate
@@ -562,6 +573,13 @@ const HomeScreen = ({ navigation }) => {
           loading={breakLoading || isProcessing}
         />
 
+        <VisitModal
+          visible={visitModalVisible}
+          onClose={() => setVisitModalVisible(false)}
+          // onSubmit={handleVisitSubmit}
+          loading={isProcessing}
+        />
+
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[
@@ -602,7 +620,7 @@ const HomeScreen = ({ navigation }) => {
             />
           )}
 
-          {/* ── Quick Actions ── */}
+          {/* Quick Actions */}
           <View style={[styles.sectionRow, { backgroundColor: C.background }]}>
             <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>
               {t.home.quickActions}
@@ -611,85 +629,38 @@ const HomeScreen = ({ navigation }) => {
 
           <View style={[styles.actionsGrid, { backgroundColor: C.background }]}>
             {quickActions.map((item, index) => {
-              const Icon = item.icon;
               const isBreakAction = item.label === t.home.idleTracking;
               const isVisitAction = item.label === 'Visit';
               const isActive = isBreakAction && isOnBreak;
-
-              const disabled =
-                isLoading ||
-                (isBreakAction && (!isPunchedIn || isOnBreak)) ||
-                (isVisitAction && !isPunchedIn);
+              const disabled = isLoading;
+              //  ||
+              // (isBreakAction && (!isPunchedIn || isOnBreak)) ||
+              // (isVisitAction && !isPunchedIn);
 
               return (
-                <TouchableOpacity
+                <QuickActionCard
                   key={index}
-                  style={[
-                    styles.actionCard,
-                    { backgroundColor: C.surface, borderColor: C.border },
-                    disabled && styles.actionCardDisabled,
-                    isActive && { borderColor: C.warning + '66' },
-                  ]}
+                  icon={item.icon}
+                  label={item.label}
+                  color={item.color}
                   onPress={() => handleQuickActionPress(item.label)}
-                  activeOpacity={0.7}
                   disabled={disabled}
-                >
-                  <View
-                    style={[
-                      styles.actionIconWrap,
-                      {
-                        backgroundColor: disabled
-                          ? C.disabled + '20'
-                          : item.color + '25',
-                      },
-                    ]}
-                  >
-                    <Icon
-                      size={wp('6%')}
-                      color={disabled ? C.disabled : item.color}
-                    />
-                  </View>
-                  <Text
-                    style={[
-                      styles.actionLabel,
-                      { color: C.iconTitle },
-                      disabled && { color: C.disabled },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {item.label}
-                  </Text>
-                  {isActive && (
-                    <View
-                      style={[
-                        styles.activePill,
-                        { backgroundColor: C.warning },
-                      ]}
-                    >
-                      <Text
-                        style={[styles.activePillText, { color: C.textDark }]}
-                      >
-                        {t.attendance.active}
-                      </Text>
-                    </View>
-                  )}
-                  {(isBreakAction || isVisitAction) &&
+                  isActive={isActive}
+                  hint={
+                    (isBreakAction || isVisitAction) &&
                     !isPunchedIn &&
-                    !isActive && (
-                      <Text
-                        style={[styles.actionHint, { color: C.textSecondary }]}
-                        numberOfLines={1}
-                      >
-                        {t.attendance.needCheckIn || 'Need check-in'}
-                      </Text>
-                    )}
-                </TouchableOpacity>
+                    !isActive
+                      ? t.attendance.needCheckIn || 'Need check-in'
+                      : undefined
+                  }
+                  theme={theme}
+                />
               );
             })}
           </View>
 
-          {/* ── Today's Activity header ── */}
-          <View style={[styles.sectionRow, { backgroundColor: C.background }]}>
+          {/* Today's Activity header */}
+          <View style={[styles.sectionRow, { backgroundColor: C.background, marginTop: hp('4%') }]}>
             <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>
               {t.home.todaysActivity}
             </Text>
@@ -747,7 +718,7 @@ const HomeScreen = ({ navigation }) => {
             </View>
           )}
 
-          {/* ── Attendance Card ── */}
+          {/* Attendance Card */}
           {historyLoading && !refreshing ? (
             <View
               style={[
@@ -767,11 +738,10 @@ const HomeScreen = ({ navigation }) => {
                 { backgroundColor: C.surface, borderColor: cardBorderColor },
               ]}
             >
-              {/* ── Card Header ── */}
+              {/* Card Header */}
               <View
                 style={[styles.cardHeader, { borderBottomColor: C.border }]}
               >
-                {/* Left: avatar + status/time stack */}
                 <View style={styles.cardUserRow}>
                   {lastImage ? (
                     <Image
@@ -793,62 +763,13 @@ const HomeScreen = ({ navigation }) => {
                     </View>
                   )}
 
-                  {/* Status pill + punch time — flex:1 keeps it from pushing the button */}
                   <View style={styles.cardInfoCol}>
-                    <View
-                      style={[
-                        styles.statusPill,
-                        {
-                          backgroundColor: isAbsent
-                            ? C.error + '12'
-                            : isPunchedIn
-                            ? isHalfDay || isUserLate
-                              ? C.warning + '12'
-                              : C.success + '12'
-                            : hasAnySessionToday
-                            ? C.textSecondary + '12'
-                            : C.border + '30',
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.statusPillDot,
-                          {
-                            backgroundColor: isAbsent
-                              ? C.error
-                              : isPunchedIn
-                              ? isHalfDay || isUserLate
-                                ? C.warning
-                                : C.success
-                              : C.textSecondary,
-                          },
-                        ]}
-                      />
-                      <Text
-                        style={[
-                          styles.statusPillText,
-                          {
-                            color: isAbsent
-                              ? C.error
-                              : isPunchedIn
-                              ? isHalfDay || isUserLate
-                                ? C.warning
-                                : C.success
-                              : C.textSecondary,
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {isAbsent
-                          ? t.attendance.absent || 'ABSENT'
-                          : isPunchedIn
-                          ? t.attendance.punchedIn
-                          : hasAnySessionToday
-                          ? t.attendance.punchedOut
-                          : t.attendance.notMarked}
-                      </Text>
-                    </View>
+                    <StatusPill
+                      status={statusConfig.label}
+                      color={statusConfig.color}
+                      icon={statusConfig.icon}
+                      theme={theme}
+                    />
 
                     {isPunchedIn && (
                       <>
@@ -873,7 +794,6 @@ const HomeScreen = ({ navigation }) => {
                   </View>
                 </View>
 
-                {/* Punch Out button — shrinks instead of overflowing */}
                 {shouldShowPunchOut() && (
                   <TouchableOpacity
                     style={[
@@ -901,63 +821,27 @@ const HomeScreen = ({ navigation }) => {
                 )}
               </View>
 
-              {/* ── Stats Row ── */}
+              {/* Stats Row */}
               <View style={[styles.statsRow, { borderBottomColor: C.border }]}>
-                {/* Working time */}
-                <View style={styles.statItem}>
-                  <View
-                    style={[
-                      styles.statIconWrap,
-                      { backgroundColor: C.primary + '15' },
-                    ]}
-                  >
-                    <TrendingUp size={wp('3.5%')} color={C.primary} />
-                  </View>
-                  <View style={styles.statTextCol}>
-                    <Text
-                      style={[styles.statValue, { color: C.textPrimary }]}
-                      numberOfLines={1}
-                    >
-                      {getFormattedDuration(totalMinutes)}
-                    </Text>
-                    <Text
-                      style={[styles.statLabel, { color: C.textSecondary }]}
-                      numberOfLines={1}
-                    >
-                      {t.attendance.workingTime}
-                    </Text>
-                  </View>
-                </View>
+                <StatItem
+                  icon={TrendingUp}
+                  value={getFormattedDuration(totalMinutes)}
+                  label={t.attendance.workingTime}
+                  color={C.primary}
+                  theme={theme}
+                />
 
                 <View
                   style={[styles.statDivider, { backgroundColor: C.border }]}
                 />
 
-                {/* Break time */}
-                <View style={styles.statItem}>
-                  <View
-                    style={[
-                      styles.statIconWrap,
-                      { backgroundColor: C.warning + '15' },
-                    ]}
-                  >
-                    <Coffee size={wp('3.5%')} color={C.warning} />
-                  </View>
-                  <View style={styles.statTextCol}>
-                    <Text
-                      style={[styles.statValue, { color: C.textPrimary }]}
-                      numberOfLines={1}
-                    >
-                      {getFormattedDuration(totalBreakMinutes)}
-                    </Text>
-                    <Text
-                      style={[styles.statLabel, { color: C.textSecondary }]}
-                      numberOfLines={1}
-                    >
-                      {t.attendance.breakTime}
-                    </Text>
-                  </View>
-                </View>
+                <StatItem
+                  icon={Coffee}
+                  value={getFormattedDuration(totalBreakMinutes)}
+                  label={t.attendance.breakTime}
+                  color={C.warning}
+                  theme={theme}
+                />
 
                 {breakCount > 0 && (
                   <>
@@ -967,30 +851,13 @@ const HomeScreen = ({ navigation }) => {
                         { backgroundColor: C.border },
                       ]}
                     />
-                    <View style={styles.statItem}>
-                      <View
-                        style={[
-                          styles.statIconWrap,
-                          { backgroundColor: C.info + '15' },
-                        ]}
-                      >
-                        <Clock size={wp('3.5%')} color={C.info} />
-                      </View>
-                      <View style={styles.statTextCol}>
-                        <Text
-                          style={[styles.statValue, { color: C.textPrimary }]}
-                          numberOfLines={1}
-                        >
-                          {breakCount}
-                        </Text>
-                        <Text
-                          style={[styles.statLabel, { color: C.textSecondary }]}
-                          numberOfLines={1}
-                        >
-                          {t.attendance.breakCount || 'Breaks'}
-                        </Text>
-                      </View>
-                    </View>
+                    <StatItem
+                      icon={Clock}
+                      value={breakCount}
+                      label={t.attendance.breakCount || 'Breaks'}
+                      color={C.info}
+                      theme={theme}
+                    />
                   </>
                 )}
               </View>
@@ -1029,7 +896,7 @@ const HomeScreen = ({ navigation }) => {
                 </View>
               )}
 
-              {/* ── Breaks List ── */}
+              {/* Breaks List */}
               {sessions.map(
                 (session, si) =>
                   session.breaks?.length > 0 && (
@@ -1052,303 +919,42 @@ const HomeScreen = ({ navigation }) => {
                         {t.attendance.breaks || 'Breaks'}
                       </Text>
                       {session.breaks.map((b, bi) => (
-                        <View
+                        <BreakItem
                           key={bi}
-                          style={[
-                            styles.breakRow,
-                            {
-                              borderBottomColor: C.border,
-                              borderBottomWidth:
-                                bi < session.breaks.length - 1 ? 1 : 0,
-                            },
-                          ]}
-                        >
-                          {/* Left: type badge + remarks + time range */}
-                          <View style={styles.breakRowLeft}>
-                            <View
-                              style={[
-                                styles.breakTypeBadge,
-                                {
-                                  backgroundColor: b.breakOut
-                                    ? C.border + '30'
-                                    : C.warning + '15',
-                                },
-                              ]}
-                            >
-                              <Coffee
-                                size={wp('3%')}
-                                color={b.breakOut ? C.textSecondary : C.warning}
-                              />
-                              <Text
-                                style={[
-                                  styles.breakTypeBadgeText,
-                                  {
-                                    color: b.breakOut
-                                      ? C.textSecondary
-                                      : C.warning,
-                                  },
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {b.breakType}
-                              </Text>
-                            </View>
-                            {b.remarks ? (
-                              <Text
-                                style={[
-                                  styles.breakRemark,
-                                  { color: C.textSecondary },
-                                ]}
-                                numberOfLines={2}
-                              >
-                                {t.attendance.breakRemarks || 'Remarks'}:{' '}
-                                {b.remarks}
-                              </Text>
-                            ) : null}
-                            <Text
-                              style={[
-                                styles.breakTimeRange,
-                                { color: C.textSecondary },
-                              ]}
-                              numberOfLines={1}
-                            >
-                              {formatTime(b.breakIn)}
-                              {b.breakOut
-                                ? ` → ${formatTime(b.breakOut)}`
-                                : ` → ${t.attendance.ongoing || 'Ongoing'}`}
-                            </Text>
-                          </View>
-
-                          {/* Right: duration badge */}
-                          <View
-                            style={[
-                              styles.breakDurationBadge,
-                              {
-                                backgroundColor: b.durationMinutes
-                                  ? C.primary + '12'
-                                  : C.warning + '12',
-                              },
-                            ]}
-                          >
-                            <Text
-                              style={[
-                                styles.breakDurationText,
-                                {
-                                  color: b.durationMinutes
-                                    ? C.primary
-                                    : C.warning,
-                                },
-                              ]}
-                            >
-                              {b.durationMinutes
-                                ? getFormattedDuration(b.durationMinutes)
-                                : '●'}
-                            </Text>
-                          </View>
-                        </View>
+                          break={b}
+                          formatTime={formatTime}
+                          getFormattedDuration={getFormattedDuration}
+                          theme={theme}
+                        />
                       ))}
                     </View>
                   ),
               )}
 
-              {/* ── Sessions Table ── */}
+              {/* Sessions Table */}
               {sessions.length > 0 && (
-                <View style={[styles.tableSection, { borderColor: C.border }]}>
-                  <View
-                    style={[
-                      styles.tableHead,
-                      { backgroundColor: C.background + '80' },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.tableHeadCell,
-                        styles.tableCellLeft,
-                        { color: C.primary },
-                      ]}
-                    >
-                      {t.attendance.in || 'IN'}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.tableHeadCell,
-                        styles.tableCellCenter,
-                        { color: C.primary },
-                      ]}
-                    >
-                      {t.attendance.duration || 'DURATION'}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.tableHeadCell,
-                        styles.tableCellRight,
-                        { color: C.primary },
-                      ]}
-                    >
-                      {t.attendance.out || 'OUT'}
-                    </Text>
-                  </View>
-                  {sessions.map((session, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.tableBodyRow,
-                        {
-                          backgroundColor:
-                            i % 2 === 0 ? C.background + '80' : C.surface,
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.tableBodyCell,
-                          styles.tableCellLeft,
-                          { color: C.success },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {session.punchIn ? formatTime(session.punchIn) : '---'}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.tableBodyCell,
-                          styles.tableCellCenter,
-                          { color: C.textSecondary },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {session.durationMinutes
-                          ? getFormattedDuration(session.durationMinutes)
-                          : '---'}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.tableBodyCell,
-                          styles.tableCellRight,
-                          { color: C.error },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {session.punchOut
-                          ? formatTime(session.punchOut)
-                          : '---'}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
+                <AttendanceTable
+                  sessions={sessions}
+                  formatTime={formatTime}
+                  getFormattedDuration={getFormattedDuration}
+                  theme={theme}
+                />
               )}
 
-              {/* ── Absent Block ── */}
+              {/* Absent Block */}
               {isAbsent && (
-                <View
-                  style={[
-                    styles.absentContainer,
-                    { backgroundColor: C.surface, borderColor: C.error + '30' },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.absentIconContainer,
-                      { backgroundColor: C.error + '12' },
-                    ]}
-                  >
-                    <XCircle size={wp('10%')} color={C.error} />
-                  </View>
-                  <Text style={[styles.absentTitle, { color: C.textPrimary }]}>
-                    {t.attendance.absent || 'Absent Today'}
-                  </Text>
-                  <Text
-                    style={[styles.absentMessage, { color: C.textSecondary }]}
-                  >
-                    {t.attendance.noAttendanceToday}
-                  </Text>
-
-                  <View style={styles.contactManagerSection}>
-                    <Text
-                      style={[
-                        styles.contactManagerTitle,
-                        { color: C.textPrimary },
-                      ]}
-                    >
-                      {t.attendance.contactManager || 'Contact Your Manager'}
-                    </Text>
-                    <View style={styles.contactButtonsRow}>
-                      {managerEmail ? (
-                        <TouchableOpacity
-                          style={[
-                            styles.contactButton,
-                            {
-                              backgroundColor: C.primary + '12',
-                              borderColor: C.primary,
-                            },
-                          ]}
-                          onPress={() => handleContactManager('email')}
-                        >
-                          <Mail size={wp('4%')} color={C.primary} />
-                          <Text
-                            style={[
-                              styles.contactButtonText,
-                              { color: C.primary },
-                            ]}
-                          >
-                            {t.attendance.email || 'Email'}
-                          </Text>
-                        </TouchableOpacity>
-                      ) : null}
-                      {managerPhone ? (
-                        <TouchableOpacity
-                          style={[
-                            styles.contactButton,
-                            {
-                              backgroundColor: C.success + '12',
-                              borderColor: C.success,
-                            },
-                          ]}
-                          onPress={() => handleContactManager('phone')}
-                        >
-                          <Phone size={wp('4%')} color={C.success} />
-                          <Text
-                            style={[
-                              styles.contactButtonText,
-                              { color: C.success },
-                            ]}
-                          >
-                            {t.attendance.call || 'Call'}
-                          </Text>
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                    <Text
-                      style={[styles.managerName, { color: C.textSecondary }]}
-                    >
-                      {managerName || 'Your Manager'}
-                    </Text>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.absentDivider,
-                      { backgroundColor: C.border },
-                    ]}
-                  />
-
-                  <TouchableOpacity
-                    style={[
-                      styles.absentContactBtn,
-                      { borderColor: C.primary },
-                    ]}
-                    onPress={() => navigation.navigate('Leave')}
-                  >
-                    <Text
-                      style={[styles.absentContactText, { color: C.primary }]}
-                    >
-                      {t.attendance.applyLeave || 'Apply for Leave'}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
+                <AbsentCard
+                  managerName={managerName}
+                  managerEmail={managerEmail}
+                  managerPhone={managerPhone}
+                  onApplyLeave={() => navigation.navigate('Leave')}
+                  onContactManager={handleContactManager}
+                  theme={theme}
+                  t={t}
+                />
               )}
 
-              {/* ── Location Row ── */}
+              {/* Location Row */}
               {lastSession?.punchInLocation ? (
                 <View
                   style={[styles.locationRow, { borderTopColor: C.border }]}
@@ -1367,7 +973,7 @@ const HomeScreen = ({ navigation }) => {
               ) : null}
             </View>
           ) : (
-            /* ── Empty state ── */
+            /* Empty state */
             <View
               style={[
                 styles.emptyCard,
@@ -1416,105 +1022,26 @@ const HomeScreen = ({ navigation }) => {
         </ScrollView>
       </MainLayout>
 
-      {/* ── Profile Modal ── */}
-      <Modal
+      {/* Profile Modal */}
+      <ProfileModal
         visible={profileModalVisible}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setProfileModalVisible(false)}
-      >
-        <View style={[styles.modalOverlay, { backgroundColor: C.overlayBg }]}>
-          <View
-            style={[
-              styles.profileModalCard,
-              { backgroundColor: C.surfaceSolid, borderColor: C.border },
-            ]}
-          >
-            <View style={styles.profileHeader}>
-              <View
-                style={[styles.profileAvatar, { backgroundColor: C.primary }]}
-              >
-                <Text style={[styles.profileAvatarText, { color: C.textDark }]}>
-                  {profile?.[0]?.fullName?.charAt(0).toUpperCase() || 'G'}
-                </Text>
-              </View>
-              <Text style={[styles.profileName, { color: C.textPrimary }]}>
-                {profile?.[0]?.fullName || 'Guest'}
-              </Text>
-              <Text
-                style={[styles.profileDesignation, { color: C.textSecondary }]}
-              >
-                {profile?.[0]?.designation || '-'}
-              </Text>
-            </View>
-
-            <View style={styles.profileInfoSection}>
-              {[
-                {
-                  label: t.settings.employeeCode || 'Employee Code',
-                  value: profile?.[0]?.employeeCode || '-',
-                },
-                {
-                  label: t.login.emailLabel || 'Email',
-                  value: profile?.[0]?.email || '-',
-                },
-                {
-                  label: t.attendance.department || 'Department',
-                  value: profile?.[0]?.department || '-',
-                },
-                {
-                  label: t.attendance.reportingManager || 'Reporting Manager',
-                  value: profile?.[0]?.reportingTo?.name || '-',
-                },
-              ].map((row, i) => (
-                <View
-                  key={i}
-                  style={[styles.profileRow, { borderBottomColor: C.border }]}
-                >
-                  <Text
-                    style={[styles.profileLabel, { color: C.textSecondary }]}
-                  >
-                    {row.label}
-                  </Text>
-                  <Text
-                    style={[styles.profileValue, { color: C.textPrimary }]}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {row.value}
-                  </Text>
-                </View>
-              ))}
-            </View>
-
-            <TouchableOpacity
-              style={[styles.profileCloseBtn, { backgroundColor: C.primary }]}
-              onPress={() => setProfileModalVisible(false)}
-            >
-              <Text style={[styles.profileCloseBtnText, { color: C.textDark }]}>
-                {t.buttons.close || 'Close'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setProfileModalVisible(false)}
+        profile={profile}
+        theme={theme}
+        t={t}
+      />
     </>
   );
 };
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
+// Styles (only the ones that couldn't be moved to components)
 const CARD_H_PAD = wp('4%');
-const ACTION_GAP = wp('2.5%');
-// 2 columns, screen padding 0 (MainLayout handles it), gap between cards
-const ACTION_CARD_WIDTH = (wp('100%') - wp('10%') - ACTION_GAP) / 2.25;
 
 const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: wp('4%'),
     paddingBottom: hp('2%'),
   },
-
-  // ── Overlay ──
   overlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -1530,13 +1057,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   overlayText: { fontSize: wp('3.5%'), fontFamily: Fonts.medium },
-
-  // ── Section header ──
   sectionRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: hp('2.5%'),
+    marginTop: hp('2%'),
     marginBottom: hp('1.2%'),
   },
   sectionLabel: {
@@ -1545,55 +1070,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
-
-  // ── Quick actions grid ──
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: ACTION_GAP,
+    gap: wp('2.5%'),
+    alignItems:'baseline'
   },
-  actionCard: {
-    width: ACTION_CARD_WIDTH,
-    borderRadius: wp('4%'),
-    paddingVertical: hp('1.8%'),
-    paddingHorizontal: wp('2%'),
-    alignItems: 'center',
-    borderWidth: 1,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-  },
-  actionCardDisabled: { opacity: 0.4 },
-  actionIconWrap: {
-    width: wp('11%'),
-    height: wp('11%'),
-    borderRadius: wp('3%'),
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: hp('0.8%'),
-  },
-  actionLabel: {
-    fontSize: wp('2.8%'),
-    fontFamily: Fonts.medium,
-    textAlign: 'center',
-  },
-  actionHint: {
-    fontSize: wp('2.2%'),
-    fontFamily: Fonts.regular,
-    marginTop: 3,
-    textAlign: 'center',
-  },
-  activePill: {
-    paddingHorizontal: wp('2.5%'),
-    paddingVertical: 2,
-    borderRadius: 20,
-    marginTop: 4,
-  },
-  activePillText: { fontSize: wp('2%'), fontFamily: Fonts.medium },
-
-  // ── Format pill / dropdown ──
   formatPill: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1621,8 +1103,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   dropdownText: { fontSize: wp('3.2%'), fontFamily: Fonts.regular },
-
-  // ── Main attendance card ──
   card: {
     borderRadius: wp('5%'),
     borderWidth: 1,
@@ -1633,8 +1113,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 12,
   },
-
-  // Card header — key fix: no fixed heights, proper flex
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1647,42 +1125,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: wp('3%'),
-    flex: 1, // ← takes remaining space, lets button sit at its natural size
-    minWidth: 0, // ← allows inner content to shrink
+    flex: 1,
+    minWidth: 0,
   },
   cardAvatar: {
     width: wp('12%'),
     height: wp('12%'),
     borderRadius: wp('6%'),
     borderWidth: 2,
-    flexShrink: 0, // ← avatar never shrinks
+    flexShrink: 0,
   },
   cardAvatarPlaceholder: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  // New: text column next to avatar — flex:1 so it shrinks before button
   cardInfoCol: {
     flex: 1,
     minWidth: 0,
-  },
-  statusPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: wp('2.5%'),
-    paddingVertical: 4,
-    borderRadius: 20,
-    gap: 5,
-    alignSelf: 'flex-start',
-    marginBottom: 4,
-    maxWidth: '100%',
-  },
-  statusPillDot: { width: 6, height: 6, borderRadius: 3, flexShrink: 0 },
-  statusPillText: {
-    fontSize: wp('2.4%'),
-    fontFamily: Fonts.medium,
-    letterSpacing: 0.3,
-    flexShrink: 1,
   },
   cardPunchTime: {
     fontSize: wp('4%'),
@@ -1694,7 +1153,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
     marginTop: 1,
   },
-  // Punch-out button — fixed width, never expands, never overflows
   punchOutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1710,8 +1168,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.medium,
     flexShrink: 1,
   },
-
-  // ── Stats row ──
   statsRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1719,43 +1175,12 @@ const styles = StyleSheet.create({
     paddingVertical: hp('1.4%'),
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  statItem: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: wp('2%'),
-    minWidth: 0,
-  },
-  statIconWrap: {
-    width: wp('7%'),
-    height: wp('7%'),
-    borderRadius: wp('2%'),
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
-  },
-  // New wrapper for stat text to allow proper truncation
-  statTextCol: {
-    flex: 1,
-    minWidth: 0,
-  },
-  statValue: {
-    fontSize: wp('3.5%'),
-    fontFamily: Fonts.bold,
-  },
-  statLabel: {
-    fontSize: wp('2.4%'),
-    fontFamily: Fonts.regular,
-    marginTop: 1,
-  },
   statDivider: {
     width: StyleSheet.hairlineWidth,
     height: hp('4%'),
     marginHorizontal: wp('1.5%'),
     flexShrink: 0,
   },
-
-  // ── Short leave ──
   shortLeaveContainer: {
     margin: CARD_H_PAD,
     marginBottom: 0,
@@ -1765,8 +1190,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   shortLeaveText: { fontSize: wp('2.8%'), fontFamily: Fonts.medium },
-
-  // ── Alert info ──
   alertInfo: {
     margin: CARD_H_PAD,
     marginBottom: 0,
@@ -1776,8 +1199,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   alertText: { fontSize: wp('3%'), fontFamily: Fonts.medium },
-
-  // ── Breaks section ──
   breaksSection: {
     margin: CARD_H_PAD,
     marginBottom: 0,
@@ -1792,150 +1213,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.6,
   },
-  breakRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: hp('0.9%'),
-    gap: wp('2%'),
-  },
-  breakRowLeft: {
-    flex: 1,
-    minWidth: 0,
-    gap: 3,
-  },
-  breakTypeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: wp('2%'),
-    paddingVertical: 3,
-    borderRadius: 20,
-    gap: 4,
-    maxWidth: '100%',
-  },
-  breakTypeBadgeText: {
-    fontSize: wp('2.6%'),
-    fontFamily: Fonts.medium,
-    flexShrink: 1,
-  },
-  breakRemark: {
-    fontSize: wp('2.6%'),
-    fontFamily: Fonts.regular,
-    paddingLeft: 2,
-  },
-  breakTimeRange: {
-    fontSize: wp('2.6%'),
-    fontFamily: Fonts.regular,
-    paddingLeft: 2,
-  },
-  breakDurationBadge: {
-    paddingHorizontal: wp('2.5%'),
-    paddingVertical: hp('0.4%'),
-    borderRadius: 20,
-    flexShrink: 0,
-    alignSelf: 'center',
-  },
-  breakDurationText: { fontSize: wp('2.8%'), fontFamily: Fonts.medium },
-
-  // ── Sessions table ──
-  tableSection: {
-    margin: CARD_H_PAD,
-    marginBottom: 0,
-    borderRadius: wp('3%'),
-    overflow: 'hidden',
-    borderWidth: 1,
-  },
-  tableHead: {
-    flexDirection: 'row',
-    paddingVertical: hp('1%'),
-    paddingHorizontal: wp('3%'),
-  },
-  tableBodyRow: {
-    flexDirection: 'row',
-    paddingVertical: hp('1%'),
-    paddingHorizontal: wp('3%'),
-  },
-  tableHeadCell: {
-    flex: 1,
-    fontSize: wp('2.5%'),
-    fontFamily: Fonts.medium,
-    letterSpacing: 0.4,
-  },
-  tableBodyCell: {
-    flex: 1,
-    fontSize: wp('3%'),
-    fontFamily: Fonts.regular,
-  },
-  // Alignment helpers — avoids conflicting textAlign in StyleSheet
-  tableCellLeft: { textAlign: 'left' },
-  tableCellCenter: { textAlign: 'center' },
-  tableCellRight: { textAlign: 'right' },
-
-  // ── Absent block ──
-  absentContainer: {
-    alignItems: 'center',
-    padding: hp('3%'),
-    margin: CARD_H_PAD,
-    borderRadius: wp('4%'),
-    borderWidth: 1,
-  },
-  absentIconContainer: {
-    width: wp('16%'),
-    height: wp('16%'),
-    borderRadius: wp('8%'),
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: hp('1.5%'),
-  },
-  absentTitle: {
-    fontSize: wp('4.5%'),
-    fontFamily: Fonts.bold,
-    marginBottom: hp('0.5%'),
-  },
-  absentMessage: {
-    fontSize: wp('3.2%'),
-    fontFamily: Fonts.regular,
-    textAlign: 'center',
-    marginBottom: hp('2%'),
-  },
-  contactManagerSection: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: hp('2%'),
-  },
-  contactManagerTitle: {
-    fontSize: wp('3.2%'),
-    fontFamily: Fonts.medium,
-    marginBottom: hp('1%'),
-  },
-  contactButtonsRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: wp('3%'),
-    marginBottom: hp('1%'),
-  },
-  contactButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: wp('4%'),
-    paddingVertical: hp('1%'),
-    borderRadius: wp('5%'),
-    borderWidth: 1,
-    gap: wp('1.5%'),
-  },
-  contactButtonText: { fontSize: wp('2.8%'), fontFamily: Fonts.medium },
-  managerName: { fontSize: wp('2.8%'), fontFamily: Fonts.regular },
-  absentDivider: { height: 1, width: '30%', marginBottom: hp('2%') },
-  absentContactBtn: {
-    paddingHorizontal: wp('6%'),
-    paddingVertical: hp('1.2%'),
-    borderRadius: wp('5%'),
-    borderWidth: 1,
-  },
-  absentContactText: { fontSize: wp('3.2%'), fontFamily: Fonts.medium },
-
-  // ── Location row ──
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1949,8 +1226,6 @@ const styles = StyleSheet.create({
     fontSize: wp('2.8%'),
     fontFamily: Fonts.regular,
   },
-
-  // ── Empty state ──
   emptyCard: {
     borderRadius: wp('5%'),
     padding: hp('4%'),
@@ -1991,8 +1266,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   punchInBtnText: { fontSize: wp('3.8%'), fontFamily: Fonts.medium },
-
-  // ── Loading card ──
   loadingCard: {
     borderRadius: wp('5%'),
     padding: hp('3%'),
@@ -2001,73 +1274,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   loadingText: { fontSize: wp('3.2%'), fontFamily: Fonts.regular },
-
-  // ── Profile modal ──
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: wp('6%'),
-  },
-  profileModalCard: {
-    width: '100%',
-    borderRadius: wp('5%'),
-    padding: wp('6%'),
-    borderWidth: 1,
-  },
-  profileHeader: {
-    alignItems: 'center',
-    marginBottom: hp('2%'),
-    paddingBottom: hp('2%'),
-  },
-  profileAvatar: {
-    width: wp('18%'),
-    height: wp('18%'),
-    borderRadius: wp('9%'),
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: hp('1%'),
-  },
-  profileAvatarText: { fontSize: wp('7%'), fontFamily: Fonts.bold },
-  profileName: {
-    fontSize: wp('5%'),
-    fontFamily: Fonts.bold,
-    textAlign: 'center',
-  },
-  profileDesignation: {
-    fontSize: wp('3.5%'),
-    fontFamily: Fonts.regular,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  profileInfoSection: { marginTop: hp('1%') },
-  profileRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    paddingVertical: hp('1.2%'),
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: wp('4%'),
-  },
-  profileLabel: {
-    fontSize: wp('3.2%'),
-    fontFamily: Fonts.medium,
-    flexShrink: 0, // label never shrinks
-    maxWidth: '45%',
-  },
-  profileValue: {
-    fontSize: wp('3.2%'),
-    fontFamily: Fonts.regular,
-    flex: 1, // value takes remaining space
-    textAlign: 'right',
-  },
-  profileCloseBtn: {
-    marginTop: hp('2.5%'),
-    paddingVertical: hp('1.4%'),
-    borderRadius: wp('3%'),
-    alignItems: 'center',
-  },
-  profileCloseBtnText: { fontSize: wp('3.5%'), fontFamily: Fonts.medium },
 });
 
 export default HomeScreen;

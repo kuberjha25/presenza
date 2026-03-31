@@ -43,7 +43,7 @@ import { Colors, Fonts } from '../../../utils/GlobalText';
 import { useTheme } from '../../../context/ThemeContext';
 import { useLanguage } from '../../../context/LanguageContext';
 import { setAlert } from '../../../store/actions/authActions';
-
+import {ReusableCalendar} from '../../../components/common/ReusableCalendar';
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const USER_BRANCH = 'CHD'; // Current user's branch
@@ -583,6 +583,128 @@ const LeaveScreen = ({ navigation }) => {
   const now = new Date();
   const todayDateStr = new Date().toISOString().split('T')[0];
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // Inside the component, add the getDayInfo function:
+const getDayInfoForCalendar = (day, dateStr) => {
+  const dayOfWeek = new Date(year, currentMonth, day).getDay();
+  const isSunday = dayOfWeek === 0;
+  const isSecondSat = day === secondSat;
+  const isFourthSat = day === fourthSat;
+  const holiday = HOLIDAY_MAP[dateStr];
+  const isPast = new Date(dateStr) < new Date(todayStr);
+  
+  const branchHoliday = holiday ? isHolidayForBranch(dateStr, USER_BRANCH) : null;
+  const isHalf = branchHoliday && (branchHoliday.type === 'half1' || branchHoliday.type === 'half2');
+  const isFullHoliday = branchHoliday && branchHoliday.type === 'full';
+  
+  const isOff = isSunday || isSecondSat || isFourthSat;
+  const inRange = startDate && endDate && dateStr >= startDate && dateStr <= endDate;
+  const isStart = dateStr === startDate;
+  const isEnd = dateStr === (endDate || startDate);
+  const isSingleSelected = isStart && (!endDate || startDate === endDate);
+  const isRangeMid = inRange && !isStart && !isEnd;
+  const isRangeStart = isStart && startDate !== endDate && endDate;
+  const isRangeEnd = isEnd && startDate !== endDate && endDate;
+  
+  let backgroundColor = 'transparent';
+  let textColor = C.textPrimary;
+  let fontFamily = Fonts.medium;
+  let borderColor = 'transparent';
+  let borderWidth = 0;
+  let showDot = false;
+  let dotColor = '';
+  let showHalfIcon = false;
+  let halfIconColor = '';
+  let isHoliday = false;
+  let holidayInfo = null;
+  
+  if (isPast) {
+    textColor = C.disabled;
+  }
+  
+  if (isOff && !holiday) {
+    backgroundColor = C.error + '12';
+    textColor = C.error;
+    fontFamily = Fonts.bold;
+    isHoliday = true;
+  }
+  
+  if (isFullHoliday && branchHoliday) {
+    backgroundColor = C.primary + '18';
+    textColor = C.primary;
+    fontFamily = Fonts.bold;
+    showDot = true;
+    dotColor = C.primary;
+    isHoliday = true;
+    holidayInfo = {
+      name: holiday.name,
+      type: 'full',
+      color: C.primary,
+      branches: Object.entries(holiday.branches).map(([b, t]) => ({
+        name: b,
+        color: t === 'full' ? C.primary : C.warning,
+        isUser: b === USER_BRANCH
+      }))
+    };
+  }
+  
+  if (isHalf && branchHoliday) {
+    backgroundColor = C.warning + '18';
+    textColor = C.warning;
+    fontFamily = Fonts.bold;
+    showHalfIcon = true;
+    halfIconColor = C.warning;
+    isHoliday = true;
+    holidayInfo = {
+      name: holiday.name,
+      type: branchHoliday.type,
+      color: C.warning,
+      branches: Object.entries(holiday.branches).map(([b, t]) => ({
+        name: b,
+        color: t === 'full' ? C.primary : C.warning,
+        isUser: b === USER_BRANCH
+      }))
+    };
+  }
+  
+  if (isSingleSelected) {
+    backgroundColor = C.primary;
+    textColor = '#fff';
+    borderColor = C.primary;
+  }
+  
+  if (isRangeStart || isRangeEnd) {
+    backgroundColor = C.primary;
+    textColor = '#fff';
+  }
+  
+  if (isRangeMid) {
+    backgroundColor = C.primary + '28';
+    textColor = C.primary;
+  }
+  
+  return {
+    backgroundColor,
+    textColor,
+    fontFamily,
+    borderColor,
+    borderWidth,
+    showDot,
+    dotColor,
+    showHalfIcon,
+    halfIconColor,
+    isHoliday,
+    holidayInfo,
+    isWeeklyOff: isOff && !holiday,
+    isSunday,
+    isSecondSat,
+    isFourthSat,
+    holiday: holidayInfo,
+    branches: holidayInfo?.branches || [],
+    holidayColor: isFullHoliday ? C.primary : isHalf ? C.warning : null,
+    holidayType: isFullHoliday ? 'full' : isHalf ? branchHoliday?.type : null,
+  };
+};
 
   // ── Leave Balance ─────────────────────────────────────────────────────────
   const LEAVE_BALANCE = {
@@ -1162,7 +1284,7 @@ const LeaveScreen = ({ navigation }) => {
         <View
           style={[styles.headerIcon, { backgroundColor: C.primary + '20' }]}
         >
-          <CalendarDays size={wp('5%')} color={C.primary} />
+         
         </View>
       </View>
 
