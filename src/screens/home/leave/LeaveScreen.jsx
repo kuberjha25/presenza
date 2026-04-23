@@ -3777,7 +3777,20 @@ const LeaveScreen = ({ navigation }) => {
               onPress={() => {
                 setSuccessModalVisible(false);
                 clearSelection();
-                navigation.goBack();
+                try {
+                  if (navigation.canGoBack()) {
+                    navigation.goBack();
+                  } else {
+                    navigation.navigate('Home');
+                  }
+                } catch (error) {
+                  console.log('Navigation error:', error);
+                  // Fallback: reset navigation stack
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: 'Home' }],
+                  });
+                }
               }}
               activeOpacity={0.85}
             >
@@ -4141,7 +4154,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: hp('0.8%'),
     alignItems: 'center',
-    justifyContent:'center',
+    justifyContent: 'center',
     borderRadius: 20,
   },
   leaveTypeText: { fontSize: wp('3%'), fontFamily: Fonts.medium },
