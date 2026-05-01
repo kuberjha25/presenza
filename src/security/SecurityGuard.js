@@ -116,32 +116,51 @@ const detectTimeTampering = async () => {
 
 // ================= SERVER TIME VALIDATION (Every 30 sec) =================
 const validateWithServerTime = async () => {
-  const timeDiff = Math.abs(deviceTime - serverTime);
+  try {
+    const serverTime = await getServerTime();
 
-  // Allow 1 hour difference for timezone changes
-  const TIME_VALIDATION_THRESHOLD = 60 * 60 * 1000; // 1 hour
-  const AUTOMATIC_TIMEZONE_THRESHOLD = 24 * 60 * 60 * 1000; // 24 hours
-
-  // If difference is more than 1 hour, but user might be traveling
-  if (timeDiff > TIME_VALIDATION_THRESHOLD) {
-    // Check if this is a one-time legitimate change
-    const lastValidTime = await AsyncStorage.getItem('last_valid_server_time');
-    if (lastValidTime) {
-      const sinceLastValid = Date.now() - parseInt(lastValidTime);
-      // If last check was long ago (>24h), user might have traveled legitimately
-      if (sinceLastValid > AUTOMATIC_TIMEZONE_THRESHOLD) {
-        console.log('✅ Timezone change detected - probably legitimate travel');
-        await AsyncStorage.setItem(
-          'last_valid_server_time',
-          deviceTime.toString(),
-        );
-        return false; // Don't block
-      }
+    if (!serverTime) {
+      console.log('⚠️ Could not fetch server time, skipping validation');
+      return false;
     }
-    return true; // Block if rapid change
-  }
 
-  return false;
+    const deviceTime = Date.now();
+    const timeDiff = Math.abs(deviceTime - serverTime);
+
+    // Allow 1 hour difference for timezone changes
+    const TIME_VALIDATION_THRESHOLD = 60 * 60 * 1000; // 1 hour
+    const AUTOMATIC_TIMEZONE_THRESHOLD = 24 * 60 * 60 * 1000; // 24 hours
+
+    // If difference is more than 1 hour, but user might be traveling
+    if (timeDiff > TIME_VALIDATION_THRESHOLD) {
+      // Check if this is a one-time legitimate change
+      const lastValidTime = await AsyncStorage.getItem(
+        'last_valid_server_time',
+      );
+      if (lastValidTime) {
+        const sinceLastValid = Date.now() - parseInt(lastValidTime);
+        // If last check was long ago (>24h), user might have traveled legitimately
+        if (sinceLastValid > AUTOMATIC_TIMEZONE_THRESHOLD) {
+          console.log(
+            '✅ Timezone change detected - probably legitimate travel',
+          );
+          await AsyncStorage.setItem(
+            'last_valid_server_time',
+            deviceTime.toString(),
+          );
+          return false; // Don't block
+        }
+      }
+      console.log('❌ Time difference too high:', timeDiff / 1000, 'seconds');
+      return true; // Block if rapid change
+    }
+
+    console.log('✅ Server time validation passed');
+    return false;
+  } catch (error) {
+    console.log('❌ Error in validateWithServerTime:', error.message);
+    return false;
+  }
 };
 
 // ================= MOCK LOCATION =================

@@ -581,7 +581,7 @@ export const KRA = ({ navigation }) => {
             Key Result Areas
           </Text>
         </View>
-        <TouchableOpacity
+        {/* <TouchableOpacity
           style={[
             styles.downloadBtn,
             { backgroundColor: C.surface, borderColor: C.border },
@@ -591,7 +591,8 @@ export const KRA = ({ navigation }) => {
           }
         >
           <Download size={wp('4%')} color={C.textSecondary} />
-        </TouchableOpacity>
+        </TouchableOpacity> */}
+        <View style={styles.downloadBtn}/>
       </View>
 
       <ScrollView

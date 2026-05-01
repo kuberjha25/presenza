@@ -34,13 +34,13 @@ import KRA from '../screens/home/kra/KRA';
 // 🚨 SECURITY GUARD - COMMENTED FOR EMULATOR TESTING
 // To enable security: Uncomment the import and all related code below
 // ============================================================
-// import {
-//   startSecurityGuard,
-//   stopSecurityGuard,
-//   resetSecurityGuard,
-//   isDeviceCompromised,
-//   onAppStateChange,
-// } from '../security/SecurityGuard';
+import {
+  startSecurityGuard,
+  stopSecurityGuard,
+  resetSecurityGuard,
+  isDeviceCompromised,
+  onAppStateChange,
+} from '../security/SecurityGuard';
 // ============================================================
 
 import {
@@ -108,11 +108,11 @@ const AppNavigator = () => {
 
       if (!result.allGranted) {
         console.log('⚠️ Permissions missing, showing warning');
-        showToast(
-          '⚠️ Camera & Location permissions required for attendance',
-          'warning',
-          5000,
-        );
+        // showToast(
+        //   '⚠️ Camera & Location permissions required for attendance',
+        //   'warning',
+        //   5000,
+        // );
       } else {
         console.log('✅ All permissions granted at start');
       }
@@ -130,23 +130,23 @@ const AppNavigator = () => {
   // 🚨 SECURITY - COMMENTED FOR EMULATOR TESTING
   // To enable: Uncomment the function below
   // ============================================================
-  // const initializeSecurity = async () => {
-  //   console.log('🔒 Initializing Security Guard...');
+  const initializeSecurity = async () => {
+    console.log('🔒 Initializing Security Guard...');
 
-  //   global.setBlockedGlobal = isBlocked => {
-  //     console.log('🚨 Security block triggered:', isBlocked);
-  //     setBlocked(isBlocked);
-  //   };
+    global.setBlockedGlobal = isBlocked => {
+      console.log('🚨 Security block triggered:', isBlocked);
+      setBlocked(isBlocked);
+    };
 
-  //   try {
-  //     await startSecurityGuard();
-  //     console.log('✅ Security Guard started successfully');
-  //   } catch (error) {
-  //     console.log('❌ Error starting security guard:', error);
-  //   }
+    try {
+      await startSecurityGuard();
+      console.log('✅ Security Guard started successfully');
+    } catch (error) {
+      console.log('❌ Error starting security guard:', error);
+    }
 
-  //   setSecurityInitialized(true);
-  // };
+    setSecurityInitialized(true);
+  };
   // ============================================================
 
   // ================= INITIALIZE EVERYTHING ON APP START =================
@@ -156,8 +156,10 @@ const AppNavigator = () => {
     initializePermissions().then(() => {
       // 🚨 SECURITY - COMMENTED FOR EMULATOR TESTING
       // To enable: Uncomment the line below
-      // initializeSecurity();
-      console.log('🚀 App initializing - Phase 2: Security (DISABLED FOR TESTING)');
+      initializeSecurity();
+      console.log(
+        '🚀 App initializing - Phase 2: Security (DISABLED FOR TESTING)',
+      );
     });
 
     dispatch(checkAuthState());
@@ -167,8 +169,8 @@ const AppNavigator = () => {
     return () => {
       // 🚨 SECURITY - COMMENTED FOR EMULATOR TESTING
       // To enable: Uncomment the line below
-      // console.log('🔒 Stopping Security Guard on unmount');
-      // stopSecurityGuard();
+      console.log('🔒 Stopping Security Guard on unmount');
+      stopSecurityGuard();
       console.log('🔒 Security Guard disabled for testing');
     };
   }, [dispatch]);
@@ -176,7 +178,7 @@ const AppNavigator = () => {
   // ================= APP STATE MONITORING (IMPROVED) =================
   useEffect(() => {
     console.log('📱 Setting up AppState listener...');
-    
+
     const subscription = AppState.addEventListener(
       'change',
       handleAppStateChange,
@@ -191,7 +193,7 @@ const AppNavigator = () => {
   // 🔥 IMPROVED: Immediate checks on app state change
   const handleAppStateChange = async nextAppState => {
     console.log(
-      `📱 App state changed: ${appStateRef.current} → ${nextAppState}`
+      `📱 App state changed: ${appStateRef.current} → ${nextAppState}`,
     );
 
     // ========== APP COMING TO FOREGROUND ==========
@@ -203,11 +205,11 @@ const AppNavigator = () => {
 
       // � SECURITY - COMMENTED FOR EMULATOR TESTING
       // To enable: Uncomment the code below
-      // try {
-      //   await onAppStateChange(nextAppState);
-      // } catch (error) {
-      //   console.log('❌ Error in immediate security check:', error);
-      // }
+      try {
+        await onAppStateChange(nextAppState);
+      } catch (error) {
+        console.log('❌ Error in immediate security check:', error);
+      }
 
       // Permissions quick check
       const quickCheck = await quickCheckPermissions();
@@ -227,13 +229,13 @@ const AppNavigator = () => {
       // 🚨 SECURITY - COMMENTED FOR EMULATOR TESTING
       // To enable: Uncomment the code below
       // // Reset security guard (re-initialize after background)
-      // await resetSecurityGuard();
+      await resetSecurityGuard();
 
       // // Check if device was compromised while in background
-      // if (isDeviceCompromised()) {
-      //   console.log('⚠️ Device marked as compromised');
-      //   setBlocked(true);
-      // }
+      if (isDeviceCompromised()) {
+        console.log('⚠️ Device marked as compromised');
+        setBlocked(true);
+      }
     }
 
     // ========== APP GOING TO BACKGROUND ==========
@@ -241,11 +243,11 @@ const AppNavigator = () => {
       console.log('⏸️ APP BACKGROUND - Pausing some checks');
       // 🚨 SECURITY - COMMENTED FOR EMULATOR TESTING
       // To enable: Uncomment the code below
-      // try {
-      //   await onAppStateChange(nextAppState);
-      // } catch (error) {
-      //   console.log('❌ Error handling background state:', error);
-      // }
+      try {
+        await onAppStateChange(nextAppState);
+      } catch (error) {
+        console.log('❌ Error handling background state:', error);
+      }
     }
 
     appStateRef.current = nextAppState;
@@ -296,28 +298,28 @@ const AppNavigator = () => {
   }
 
   return (
-      <View style={styles.container}>
-        {/* 🔴 FULL BLOCK SCREEN (SECURITY VIOLATION) */}
-        {blocked && (
-          <View style={styles.blockContainer}>
-            <View style={styles.blockContent}>
-              <Text style={styles.blockTitle}>🚨 Security Violation</Text>
-              <Text style={styles.blockText}>
-                A security issue has been detected on your device.{'\n\n'}
-                This app cannot run on compromised devices.{'\n\n'}
-                The app will close in a few seconds.
-              </Text>
-              <ActivityIndicator
-                size="large"
-                color="#FF6B6B"
-                style={{ marginTop: 20 }}
-              />
-            </View>
+    <View style={styles.container}>
+      {/* 🔴 FULL BLOCK SCREEN (SECURITY VIOLATION) */}
+      {blocked && (
+        <View style={styles.blockContainer}>
+          <View style={styles.blockContent}>
+            <Text style={styles.blockTitle}>🚨 Security Violation</Text>
+            <Text style={styles.blockText}>
+              A security issue has been detected on your device.{'\n\n'}
+              This app cannot run on compromised devices.{'\n\n'}
+              The app will close in a few seconds.
+            </Text>
+            <ActivityIndicator
+              size="large"
+              color="#FF6B6B"
+              style={{ marginTop: 20 }}
+            />
           </View>
-        )}
+        </View>
+      )}
 
-        {/* ⚠️ PERMISSION WARNING BANNER */}
-        {!blocked &&
+      {/* ⚠️ PERMISSION WARNING BANNER */}
+      {/* {!blocked &&
           !permissionsStatus.camera &&
           !permissionsStatus.location && (
             <View style={styles.permissionBanner}>
@@ -328,9 +330,9 @@ const AppNavigator = () => {
                 <Text style={styles.permissionBannerLink}>Enable</Text>
               </TouchableOpacity>
             </View>
-          )}
+          )} */}
 
-        {!blocked &&
+      {/* {!blocked &&
           !permissionsStatus.camera &&
           permissionsStatus.location && (
             <View
@@ -358,41 +360,41 @@ const AppNavigator = () => {
                 <Text style={styles.permissionBannerLink}>Enable</Text>
               </TouchableOpacity>
             </View>
-          )}
+          )} */}
 
-        {/* FORCE UPDATE MODAL */}
-        {!blocked && (
-          <Modal visible={forceUpdate} transparent animationType="fade">
-            <View style={styles.modalContainer}>
-              <View style={styles.modalBox}>
-                <Text style={styles.title}>Update Required 🚨</Text>
-                <Text style={styles.desc}>
-                  Please update the app to continue using it.
-                </Text>
+      {/* FORCE UPDATE MODAL */}
+      {!blocked && (
+        <Modal visible={forceUpdate} transparent animationType="fade">
+          <View style={styles.modalContainer}>
+            <View style={styles.modalBox}>
+              <Text style={styles.title}>Update Required 🚨</Text>
+              <Text style={styles.desc}>
+                Please update the app to continue using it.
+              </Text>
+              <Text style={styles.version}>
+                Your Version: {DeviceInfo.getVersion()}
+              </Text>
+              {storeVersion && (
                 <Text style={styles.version}>
-                  Your Version: {DeviceInfo.getVersion()}
+                  Latest Version: {storeVersion}
                 </Text>
-                {storeVersion && (
-                  <Text style={styles.version}>
-                    Latest Version: {storeVersion}
-                  </Text>
-                )}
-                <TouchableOpacity
-                  style={styles.button}
-                  onPress={() => storeUrl && Linking.openURL(storeUrl)}
-                >
-                  <Text style={styles.buttonText}>Update Now</Text>
-                </TouchableOpacity>
-              </View>
+              )}
+              <TouchableOpacity
+                style={styles.button}
+                onPress={() => storeUrl && Linking.openURL(storeUrl)}
+              >
+                <Text style={styles.buttonText}>Update Now</Text>
+              </TouchableOpacity>
             </View>
-          </Modal>
-        )}
+          </View>
+        </Modal>
+      )}
 
-        {/* NORMAL APP NAVIGATION */}
-        {!blocked &&
-          !forceUpdate &&
-          (isAuthenticated ? <AppStack /> : <AuthStack />)}
-      </View>
+      {/* NORMAL APP NAVIGATION */}
+      {!blocked &&
+        !forceUpdate &&
+        (isAuthenticated ? <AppStack /> : <AuthStack />)}
+    </View>
   );
 };
 

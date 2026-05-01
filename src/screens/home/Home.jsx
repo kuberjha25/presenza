@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -41,7 +42,7 @@ import {
   ReceiptText,
   CalendarClock,
   Key,
-  X
+  X,
 } from 'lucide-react-native';
 import MainLayout from '../../components/layout/MainLayout';
 import { setAlert } from '../../store/actions/authActions';
@@ -82,6 +83,86 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// ============ ATTENDANCE CALCULATION RULES (Frontend) ============
+// All times in minutes from midnight
+const ATTENDANCE_RULES = {
+  OFFICE_START: 9 * 60, // 9:00 AM
+  LATE_THRESHOLD: 9 * 60 + 40, // 9:40 AM
+  HALF_DAY_THRESHOLD: 11 * 60 + 30, // 11:30 AM
+  ABSENT_THRESHOLD: 14 * 60, // 2:00 PM
+};
+
+const getAttendanceStatusFromPunchIn = punchInTime => {
+  if (!punchInTime) {
+    return {
+      status: 'NOT_MARKED',
+      label: 'Not Marked',
+      type: 'notMarked',
+      color: 'text',
+      lateMinutes: 0,
+      icon: 'AlertCircle',
+    };
+  }
+
+  const punchInDate = new Date(punchInTime);
+  const punchInTotalMinutes =
+    punchInDate.getHours() * 60 + punchInDate.getMinutes();
+
+  // Rule 1: Before 9:40 AM → Present
+  if (punchInTotalMinutes <= ATTENDANCE_RULES.LATE_THRESHOLD) {
+    return {
+      status: 'PRESENT',
+      label: 'Present',
+      type: 'present',
+      color: 'success',
+      lateMinutes: 0,
+      icon: 'CheckCircle2',
+    };
+  }
+  // Rule 2: 9:40 AM to 11:30 AM → Late Login
+  else if (
+    punchInTotalMinutes > ATTENDANCE_RULES.LATE_THRESHOLD &&
+    punchInTotalMinutes <= ATTENDANCE_RULES.HALF_DAY_THRESHOLD
+  ) {
+    const lateMins = punchInTotalMinutes - ATTENDANCE_RULES.OFFICE_START;
+    return {
+      status: 'LATE',
+      label: `Late Login (${Math.floor(lateMins / 60)}h ${
+        lateMins % 60
+      }m late)`,
+      type: 'late',
+      color: 'warning',
+      lateMinutes: lateMins,
+      icon: 'CheckCircle2',
+    };
+  }
+  // Rule 3: 11:30 AM to 2:00 PM → Half Day
+  else if (
+    punchInTotalMinutes > ATTENDANCE_RULES.HALF_DAY_THRESHOLD &&
+    punchInTotalMinutes <= ATTENDANCE_RULES.ABSENT_THRESHOLD
+  ) {
+    return {
+      status: 'HALF_DAY',
+      label: 'Half Day',
+      type: 'halfDay',
+      color: 'warning',
+      lateMinutes: 0,
+      icon: 'AlertCircle',
+    };
+  }
+  // Rule 4: After 2:00 PM → Absent
+  else {
+    return {
+      status: 'ABSENT',
+      label: 'Absent',
+      type: 'absent',
+      color: 'error',
+      lateMinutes: 0,
+      icon: 'XCircle',
+    };
+  }
+};
+
 const HomeScreen = ({ navigation }) => {
   const dispatch = useDispatch();
   const { theme } = useTheme();
@@ -109,11 +190,15 @@ const HomeScreen = ({ navigation }) => {
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [imagePopupVisible, setImagePopupVisible] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
-  // ✅ Expand/Collapse states
+  // Expand/Collapse states
   const [expandedSections, setExpandedSections] = useState({
     breaks: false,
     sessions: false,
   });
+
+  // ✅ Track if data has been loaded on mount to prevent infinite loops
+  const dataLoadedRef = useRef(false);
+  const isInitialMountRef = useRef(true);
 
   // Profile data
   const { profile } = useSelector(state => state.employeeProfile);
@@ -136,22 +221,25 @@ const HomeScreen = ({ navigation }) => {
   const todaysPunchOut = lastSession?.punchOut;
   const lastImage = lastSession?.punchInLocation?.imageUrl;
 
+  // Get first punch in time for today
+  const firstPunchIn = todayRecord?.firstPunchIn || sessions[0]?.punchIn;
+
+  // 🔥 Calculate attendance status based on punch in time (Frontend logic)
+  const calculatedAttendance = getAttendanceStatusFromPunchIn(firstPunchIn);
+
   const rawAttendanceStatus =
     todayRecord?.attendanceStatus || todayRecord?.status || 'ABSENT';
   const isPunchedIn = todayRecord?.isPunchedIn === true;
   const hasAnySessionToday = sessions.length > 0;
 
-  const isAbsent = rawAttendanceStatus === 'ABSENT' && !isPunchedIn;
-
-  const isOnBreak =
-    !!activeBreak || lastSession?.breaks?.some(b => !b.breakOut);
-  const currentBreak = isOnBreak
-    ? activeBreak || lastSession?.breaks?.find(b => !b.breakOut)
-    : null;
-
-  const isUserLate = todayRecord?.isLate === true;
-  const isHalfDay = todayRecord?.isHalfDay === true;
-  const lateMinutes = todayRecord?.lateMinutes || 0;
+  // 🔥 Use calculated values instead of backend values
+  const isAbsent =
+    calculatedAttendance.type === 'absent' ||
+    (rawAttendanceStatus === 'ABSENT' && !isPunchedIn && !firstPunchIn);
+  const isUserLate = calculatedAttendance.type === 'late';
+  const isHalfDay = calculatedAttendance.type === 'halfDay';
+  const lateMinutes =
+    calculatedAttendance.lateMinutes || todayRecord?.lateMinutes || 0;
   const earlyLeaveMinutes = todayRecord?.earlyLeaveMinutes || 0;
   const isEarlyLeave = todayRecord?.isEarlyLeave === true;
   const morningShortLeave =
@@ -161,6 +249,12 @@ const HomeScreen = ({ navigation }) => {
   const morningShortLeaveMinutes = todayRecord?.morningShortLeave?.minutes || 0;
   const eveningShortLeaveMinutes = todayRecord?.eveningShortLeave?.minutes || 0;
   const breakCount = todayRecord?.breakCount || 0;
+
+  const isOnBreak =
+    !!activeBreak || lastSession?.breaks?.some(b => !b.breakOut);
+  const currentBreak = isOnBreak
+    ? activeBreak || lastSession?.breaks?.find(b => !b.breakOut)
+    : null;
 
   const totalMinutes = sessions.reduce(
     (acc, s) => acc + (s.durationMinutes || 0),
@@ -173,42 +267,89 @@ const HomeScreen = ({ navigation }) => {
     0,
   );
 
+  // ✅ Timer effect - runs every second to update current time
   useEffect(() => {
     timerRef.current = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timerRef.current);
   }, []);
 
+  // ✅ INITIAL LOAD - Called ONCE when component mounts
   useEffect(() => {
-    loadAttendanceHistory();
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      console.log('🔄 HomeScreen: Initial mount - Loading data...');
+      loadInitialData();
+    }
   }, []);
 
-  useEffect(() => {
-    loadEmployeeProfile();
-  }, []);
+  // ✅ FOCUS EFFECT - Called when user navigates back to this screen
+  // This will refresh data without making the user manually pull-to-refresh
+  useFocusEffect(
+    useCallback(() => {
+      // Only load if it's not the initial mount (to avoid double loading)
+      if (!isInitialMountRef.current && dataLoadedRef.current) {
+        console.log('🔄 HomeScreen: Screen focused - Refreshing data...');
+        loadAttendanceHistory();
+        loadEmployeeProfile();
+      }
+    }, []),
+  );
 
+  // ✅ Helper: Load all data on initial mount
+  const loadInitialData = async () => {
+    try {
+      console.log('📊 Loading initial data...');
+      await Promise.all([
+        dispatch(getAttendanceHistory()),
+        dispatch(getEmployeeProfile()),
+      ]);
+      dataLoadedRef.current = true;
+      console.log('✅ Initial data loaded');
+    } catch (e) {
+      console.log('❌ Error loading initial data:', e);
+      dataLoadedRef.current = true; // Mark as loaded even if error to prevent infinite attempts
+    }
+  };
+
+  // ✅ Helper: Load attendance history only
   const loadAttendanceHistory = async () => {
     try {
+      console.log('📊 Loading attendance history...');
       await dispatch(getAttendanceHistory());
+      console.log('✅ Attendance history loaded');
     } catch (e) {
-      console.log('Error loading attendance:', e);
+      console.log('❌ Error loading attendance:', e);
     }
   };
 
+  // ✅ Helper: Load employee profile only
   const loadEmployeeProfile = async () => {
     try {
-      dispatch(getEmployeeProfile());
+      console.log('👤 Loading employee profile...');
+      await dispatch(getEmployeeProfile());
+      console.log('✅ Employee profile loaded');
     } catch (e) {
-      console.log('Error loading profile:', e);
+      console.log('❌ Error loading profile:', e);
     }
   };
 
+  // ✅ Pull-to-refresh handler - Called when user pulls down
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([loadAttendanceHistory(), loadEmployeeProfile()]);
-    setRefreshing(false);
-  }, []);
+    console.log('🔄 User pulled to refresh');
+    try {
+      await Promise.all([
+        dispatch(getAttendanceHistory()),
+        dispatch(getEmployeeProfile()),
+      ]);
+      console.log('✅ Refresh completed');
+    } catch (e) {
+      console.log('❌ Error during refresh:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [dispatch]);
 
-  // ✅ Toggle expand/collapse with animation
   const toggleSection = section => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpandedSections(prev => ({
@@ -226,10 +367,26 @@ const HomeScreen = ({ navigation }) => {
     if (isProcessing || breakLoading) return;
 
     if (label === t.home.dailyPunch) {
+      // if (isPunchedIn) {
+      //   showToast(
+      //     t.alerts.alreadyPunchedIn || 'You are already punched in',
+      //     'error',
+      //   );
+      //   return;
+      // }
+      // 🔥 If already punched in, ask to punch out
       if (isPunchedIn) {
-        showToast(
-          t.alerts.alreadyPunchedIn || 'You are already punched in',
-          'error',
+        Alert.alert(
+          t.attendance.punchOut || 'Punch Out',
+          t.alerts.punchOutConfirm || 'Are you sure you want to punch out?',
+          [
+            { text: t.buttons.cancel || 'Cancel', style: 'cancel' },
+            {
+              text: t.alerts.yesPunchOut || 'Yes, Punch Out',
+              style: 'destructive',
+              onPress: handlePunchOut,
+            },
+          ],
         );
         return;
       }
@@ -243,9 +400,18 @@ const HomeScreen = ({ navigation }) => {
         return;
       }
       if (isOnBreak) {
-        showToast(
-          t.alerts.alreadyOnBreak || 'You are already on a break',
-          'error',
+        Alert.alert(
+          t.breaks.endBreak || 'End Break',
+          t.alerts.endBreakConfirm ||
+            'Are you sure you want to end your break?',
+          [
+            { text: t.buttons.cancel || 'Cancel', style: 'cancel' },
+            {
+              text: t.alerts.yesEndBreak || 'Yes, End Break',
+              style: 'destructive',
+              onPress: handleBreakOut,
+            },
+          ],
         );
         return;
       }
@@ -256,6 +422,22 @@ const HomeScreen = ({ navigation }) => {
     if (label === 'Visit') {
       if (!isPunchedIn) {
         showToast(t.alerts.punchInFirst || 'Please punch in first', 'error');
+        return;
+      }
+      if (isOnBreak) {
+        Alert.alert(
+          t.breaks.endBreak || 'End Break',
+          t.alerts.endBreakConfirm ||
+            'Are you sure you want to end your break?',
+          [
+            { text: t.buttons.cancel || 'Cancel', style: 'cancel' },
+            {
+              text: t.alerts.yesEndBreak || 'Yes, End Break',
+              style: 'destructive',
+              onPress: handleBreakOut,
+            },
+          ],
+        );
         return;
       }
       setVisitModalVisible(true);
@@ -273,8 +455,8 @@ const HomeScreen = ({ navigation }) => {
     }
 
     if (label === t.home.reimbursement) {
-      // navigation.navigate('Reimbursement');
-      // return;
+      navigation.navigate('Reimbursement');
+      return;
     }
 
     if (label === t.home.salarySlip) {
@@ -302,12 +484,10 @@ const HomeScreen = ({ navigation }) => {
       const result = await dispatch(breakIn(breakType, remarks));
       if (result?.success) {
         setBreakModalVisible(false);
-        // showToast(t.alerts.breakStarted || 'Break started successfully', 'success');
-      } else if (!result?.message?.includes('already on a break')) {
-        // showToast('' + (result?.message || t.breaks.confirm + ' ' + t.alerts.failed), 'error');
+        // Refresh data after successful break in
+        await loadAttendanceHistory();
       }
     } catch {
-      // showToast(t.alerts.serverError || 'An error occurred', 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -327,13 +507,11 @@ const HomeScreen = ({ navigation }) => {
             const result = await dispatch(
               breakOut(currentBreak?.breakType || 'LUNCH', 'Break ended'),
             );
+            // Refresh data after successful break out
             if (result?.success) {
-              // showToast(t.alerts.breakEnded || 'Break ended successfully', 'success');
-            } else {
-              // showToast('' + (result?.message || t.breaks.endBreak + ' ' + t.alerts.failed), 'error');
+              await loadAttendanceHistory();
             }
           } catch {
-            // showToast(t.alerts.serverError || 'An error occurred', 'error');
           } finally {
             setIsProcessing(false);
           }
@@ -341,6 +519,7 @@ const HomeScreen = ({ navigation }) => {
       },
     ]);
   };
+
 
   const handlePunchOut = async () => {
     if (isProcessing || punchOutLoading) return;
@@ -361,13 +540,24 @@ const HomeScreen = ({ navigation }) => {
           try {
             setIsProcessing(true);
             const result = await dispatch(punchOut());
-            // if (result?.success) {
-            //   showToast(t.alerts.punchOutSuccess || 'Punch out successful', 'success');
-            // } else {
-            //   showToast('' + (result?.message || t.attendance.punchOut + ' ' + t.alerts.failed), 'error');
-            // }
-          } catch {
-            // showToast(t.alerts.serverError || 'An error occurred', 'error');
+
+            // 🔥 Handle camera cancellation
+            if (result?.cancelled) {
+              console.log('📸 Punch out cancelled');
+              setIsProcessing(false);
+              return;
+            }
+
+            // Refresh data after successful punch out
+            if (result?.success) {
+              await loadAttendanceHistory();
+              showToast('Punch out successful!', 'success');
+            } else {
+              showToast(result?.error || 'Punch out failed', 'error');
+            }
+          } catch (error) {
+            console.log('Punch out error:', error);
+            showToast('Punch out failed', 'error');
           } finally {
             setIsProcessing(false);
           }
@@ -439,49 +629,63 @@ const HomeScreen = ({ navigation }) => {
     return t.greeting.evening;
   };
 
+  // 🔥 Updated getStatusConfig using calculated attendance
   const getStatusConfig = () => {
-    if (isAbsent) {
+    // If no punch in and not punched in
+    if (!hasAnySessionToday && !isPunchedIn) {
       return {
-        label: t.attendance.absent || 'ABSENT',
-        color: C.error,
-        icon: XCircle,
+        label: t.attendance.notMarked || 'Not Marked',
+        color: C.textSecondary,
+        icon: AlertCircle,
       };
     }
+
+    // If on break
     if (isOnBreak) {
       return { label: t.breaks.onBreak, color: C.warning, icon: Coffee };
     }
-    if (isPunchedIn) {
-      if (isHalfDay) {
+
+    // If punched in or has sessions, use calculated status
+    if (isPunchedIn || hasAnySessionToday) {
+      // Present
+      if (calculatedAttendance.type === 'present') {
+        return {
+          label: t.attendance.present || 'Present',
+          color: C.success,
+          icon: CheckCircle2,
+        };
+      }
+      // Late Login
+      if (calculatedAttendance.type === 'late') {
+        return {
+          label: calculatedAttendance.label,
+          color: C.warning,
+          icon: CheckCircle2,
+        };
+      }
+      // Half Day
+      if (calculatedAttendance.type === 'halfDay') {
         return {
           label: t.attendance.halfDay || 'Half Day',
           color: C.warning,
-          icon: CheckCircle2,
+          icon: AlertCircle,
         };
       }
-      if (isUserLate) {
+      // Absent
+      if (calculatedAttendance.type === 'absent') {
         return {
-          label: t.attendance.lateLogin || 'Late Login',
-          color: C.warning,
-          icon: CheckCircle2,
+          label: t.attendance.absent || 'Absent',
+          color: C.error,
+          icon: XCircle,
         };
       }
-      return {
-        label: t.attendance.present || 'PRESENT',
-        color: C.success,
-        icon: CheckCircle2,
-      };
     }
-    if (hasAnySessionToday) {
-      return {
-        label: t.attendance.punchedOut || 'PUNCHED OUT',
-        color: C.textSecondary,
-        icon: LogOut,
-      };
-    }
+
+    // Default present
     return {
-      label: t.attendance.notMarked || 'Not Marked',
-      color: C.textSecondary,
-      icon: AlertCircle,
+      label: t.attendance.present || 'PRESENT',
+      color: C.success,
+      icon: CheckCircle2,
     };
   };
 
@@ -498,10 +702,10 @@ const HomeScreen = ({ navigation }) => {
     { label: t.home.idleTracking, icon: Coffee, color: C.warning },
     { label: t.home.leaveManagement, icon: CalendarDays, color: C.success },
     { label: t.home.reports, icon: SquareChartGantt, color: C.info },
-    { label: t.home.salarySlip, icon: ReceiptText, color: C.secondary },
     { label: t.home.reimbursement, icon: Paperclip, color: C.purple },
     { label: t.home.meetings, icon: CalendarClock, color: C.pink },
     { label: t.home.kra, icon: Key, color: C.rose },
+    // { label: t.home.salarySlip, icon: ReceiptText, color: C.secondary },
   ];
 
   const formatOptions = [
@@ -554,7 +758,6 @@ const HomeScreen = ({ navigation }) => {
     ? C.warning + '30'
     : C.border;
 
-  // ✅ Get all breaks for display
   const getAllBreaks = () => {
     const breaksList = [];
     sessions.forEach((session, si) => {
@@ -571,7 +774,6 @@ const HomeScreen = ({ navigation }) => {
     return breaksList;
   };
 
-  // ✅ Check if breaks exist
   const hasBreaks = getAllBreaks().length > 0;
   const hasSessions = sessions.length > 0;
 
@@ -665,7 +867,16 @@ const HomeScreen = ({ navigation }) => {
           )}
 
           {/* Quick Actions */}
-          <View style={[styles.sectionRow, { backgroundColor: C.background }]}>
+          <View
+            style={[
+              styles.sectionRow,
+              {
+                backgroundColor: C.background,
+                marginTop: hp('5%'),
+                marginBottom: hp('0%'),
+              },
+            ]}
+          >
             <Text style={[styles.sectionLabel, { color: C.textSecondary }]}>
               {t.home.quickActions}
             </Text>
@@ -674,8 +885,27 @@ const HomeScreen = ({ navigation }) => {
           <View style={[styles.actionsGrid, { backgroundColor: C.background }]}>
             {quickActions.map((item, index) => {
               const isBreakAction = item.label === t.home.idleTracking;
+              const isPunchAction = item.label === t.home.dailyPunch;
               const showGreenDot = isBreakAction && isOnBreak;
-              const disabled = isLoading;
+
+              let disabled = isLoading;
+
+              if (isPunchAction && isPunchedIn) {
+                disabled = true;
+              }
+
+              if (isBreakAction && (isAbsent || !isPunchedIn)) {
+                disabled = true;
+              }
+
+              let hint = undefined;
+              if (isPunchAction && isPunchedIn) {
+                hint = 'Already punched in';
+              } else if (isBreakAction && isAbsent) {
+                hint = 'Cannot take break when absent';
+              } else if (isBreakAction && !isPunchedIn && !showGreenDot) {
+                hint = t.attendance.needCheckIn || 'Need check-in';
+              }
 
               return (
                 <View key={index} style={styles.actionCardWrapper}>
@@ -691,11 +921,7 @@ const HomeScreen = ({ navigation }) => {
                     onPress={() => handleQuickActionPress(item.label)}
                     disabled={disabled}
                     isActive={false}
-                    hint={
-                      isBreakAction && !isPunchedIn && !showGreenDot
-                        ? t.attendance.needCheckIn || 'Need check-in'
-                        : undefined
-                    }
+                    hint={hint}
                     theme={theme}
                   />
                 </View>
@@ -767,7 +993,7 @@ const HomeScreen = ({ navigation }) => {
                 {t.reports.loading}
               </Text>
             </View>
-          ) : todayRecord ? (
+          ) : todayRecord || hasAnySessionToday ? (
             <View
               style={[
                 styles.card,
@@ -906,7 +1132,7 @@ const HomeScreen = ({ navigation }) => {
               {/* Short Leave */}
               {renderShortLeaveInfo()}
 
-              {/* Late / Early Leave / Half Day */}
+              {/* Late / Early Leave / Half Day - Show based on calculated values */}
               {(isUserLate || isEarlyLeave || isHalfDay) && (
                 <View
                   style={[
@@ -937,7 +1163,7 @@ const HomeScreen = ({ navigation }) => {
                 </View>
               )}
 
-              {/* ✅ BREAKS SECTION - Expand/Collapse */}
+              {/* BREAKS SECTION - Expand/Collapse */}
               {hasBreaks && (
                 <View
                   style={[
@@ -988,7 +1214,7 @@ const HomeScreen = ({ navigation }) => {
                 </View>
               )}
 
-              {/* ✅ SESSIONS SECTION - Expand/Collapse */}
+              {/* SESSIONS SECTION - Expand/Collapse */}
               {hasSessions && (
                 <View
                   style={[
@@ -1058,7 +1284,7 @@ const HomeScreen = ({ navigation }) => {
               )}
 
               {/* Absent Block */}
-              {isAbsent && (
+              {isAbsent && !hasAnySessionToday && (
                 <AbsentCard
                   managerName={managerName}
                   managerEmail={managerEmail}
@@ -1089,7 +1315,7 @@ const HomeScreen = ({ navigation }) => {
               ) : null}
             </View>
           ) : (
-            /* Empty state */
+            /* Empty state - No attendance today */
             <View
               style={[
                 styles.emptyCard,
@@ -1239,7 +1465,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: wp('2.5%'),
     alignItems: 'baseline',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
   },
   actionCardWrapper: {
     width: '21%',
@@ -1379,7 +1605,6 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   alertText: { fontSize: wp('3%'), fontFamily: Fonts.medium },
-  // ✅ New Expand/Collapse Styles
   expandableSection: {
     margin: CARD_H_PAD,
     marginBottom: 0,
@@ -1476,44 +1701,44 @@ const styles = StyleSheet.create({
   },
   loadingText: { fontSize: wp('3.2%'), fontFamily: Fonts.regular },
   imagePopupOverlay: {
-  flex: 1,
-  justifyContent: 'center',
-  alignItems: 'center',
-  paddingHorizontal: wp('5%'),
-},
-imagePopupContainer: {
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-imageCircleWrapper: {
-  width: wp('70%'),
-  height: wp('70%'),
-  borderRadius: wp('35%'),
-  borderWidth: 3,
-  overflow: 'hidden',
-  alignItems: 'center',
-  justifyContent: 'center',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.3,
-  shadowRadius: 12,
-  elevation: 8,
-},
-imagePopup: {
-  width: '100%',
-  height: '100%',
-},
-imagePopupClose: {
-  position: 'absolute',
-  top: -wp('5%'),
-  right: -wp('5%'),
-  width: wp('10%'),
-  height: wp('10%'),
-  borderRadius: wp('5%'),
-  borderWidth: 1,
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 10,
-},
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: wp('5%'),
+  },
+  imagePopupContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  imageCircleWrapper: {
+    width: wp('70%'),
+    height: wp('70%'),
+    borderRadius: wp('35%'),
+    borderWidth: 3,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  imagePopup: {
+    width: '100%',
+    height: '100%',
+  },
+  imagePopupClose: {
+    position: 'absolute',
+    top: -wp('5%'),
+    right: -wp('5%'),
+    width: wp('10%'),
+    height: wp('10%'),
+    borderRadius: wp('5%'),
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+  },
 });
 
 export default HomeScreen;

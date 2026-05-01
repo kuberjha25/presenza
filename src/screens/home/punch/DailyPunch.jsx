@@ -46,7 +46,10 @@ import {
   checkAndRequestLocationPermission,
   getCurrentLocation,
 } from '../../../utils/utils';
-import { quickCheckPermissions, showPermissionRequiredDialog } from '../../../utils/permissions';
+import {
+  quickCheckPermissions,
+  showPermissionRequiredDialog,
+} from '../../../utils/permissions';
 import { showToast } from '../../../components/common/ToastProvider';
 
 // Office configuration
@@ -579,21 +582,32 @@ const DailyPunch = ({ navigation }) => {
     }
   };
 
-  // ── Execute punch ──
+  // Update executePunch function in DailyPunch.jsx:
+
   const executePunch = async () => {
     setIsProcessing(true);
     try {
       const result = await dispatch(punchIn());
+
+      // 🔥 NEW: Handle camera cancellation
+      if (result?.cancelled) {
+        console.log('📸 Camera cancelled by user');
+        setIsProcessing(false);
+        return; // Silently return, no toast
+      }
+
       if (result?.success) {
         setUiState('success');
-        showToast(t.alerts.punchInSuccess, 'success');
         await dispatch(getAttendanceHistory());
         setTimeout(() => {
           navigation.replace('Home');
         }, 1500);
       } else {
         setUiState('error');
-        showToast(result?.error || t.alerts.punchInFailed, 'error');
+        // Only show toast if it's not a cancellation
+        if (!result?.cancelled) {
+          showToast(result?.error || t.alerts.punchInFailed, 'error');
+        }
       }
     } catch (err) {
       setUiState('error');
@@ -604,29 +618,31 @@ const DailyPunch = ({ navigation }) => {
   };
 
   const checkPermissionsBeforePunch = async () => {
-  const permStatus = await quickCheckPermissions();
-  
-  if (!permStatus.camera || !permStatus.location) {
-    showPermissionRequiredDialog(
-      {
-        camera: !permStatus.camera,
-        location: !permStatus.location
-      },
-      () => Linking.openSettings()
-    );
-    return false;
-  }
-  
-  return true;
-};
+    const permStatus = await quickCheckPermissions();
 
+    if (!permStatus.camera || !permStatus.location) {
+      showPermissionRequiredDialog(
+        {
+          camera: !permStatus.camera,
+          location: !permStatus.location,
+        },
+        () => Linking.openSettings(),
+      );
+      return false;
+    }
+
+    return true;
+  };
 
   // ── Punch handler ──
   const handlePunch = async () => {
-     const hasPermissions = await checkPermissionsBeforePunch();
+    const hasPermissions = await checkPermissionsBeforePunch();
     if (!hasPermissions) return;
     if (hasActiveSession) {
-      showToast(t.alerts.alreadyPunchedIn || 'You are already punched in', 'warning');
+      showToast(
+        t.alerts.alreadyPunchedIn || 'You are already punched in',
+        'warning',
+      );
       return;
     }
 

@@ -34,13 +34,13 @@ const BreakReasonModal = ({ visible, onClose, onConfirm, loading }) => {
   const department = profile?.[0]?.department || '';
   const isSalesTeam = department.toLowerCase().includes('sales');
 
-  console.log('Employee isSalesTeam:', isSalesTeam);
+  // console.log('Employee isSalesTeam:', isSalesTeam);
 
   // Base break types for all employees
   const baseBreakTypes = [
     { label: t.breaks.lunch, value: 'LUNCH' },
     { label: t.breaks.tea, value: 'TEA' },
-    { label: t.breaks.coffee, value: 'COFFEE' },
+    // { label: t.breaks.coffee, value: 'COFFEE' },
     { label: t.breaks.personal, value: 'PERSONAL' },
     { label: t.breaks.other, value: 'OTHER' },
   ];
@@ -48,9 +48,9 @@ const BreakReasonModal = ({ visible, onClose, onConfirm, loading }) => {
   // Sales team specific break types
   const salesBreakTypes = [
     { label: 'Sales Meeting', value: 'SALES_MEETING' },
-    { label: 'Follow Up', value: 'FOLLOW_UP' },
+    // { label: 'Follow Up', value: 'FOLLOW_UP' },
     { label: 'Demo', value: 'DEMO' },
-    { label: 'Collections', value: 'COLLECTIONS' },
+    // { label: 'Collections', value: 'COLLECTIONS' },
   ];
 
   // Final break types based on department

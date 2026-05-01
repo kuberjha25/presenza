@@ -11,6 +11,7 @@ import { logout, setAlert } from './authActions';
 import NetInfo from '@react-native-community/netinfo';
 import { Platform } from 'react-native';
 import ImageResizer from 'react-native-image-resizer';
+import { showToast } from '../../components/common/ToastProvider';
 
 // ==================== HELPER FUNCTIONS ====================
 
@@ -100,7 +101,6 @@ export const punchIn = () => async dispatch => {
 
     await checkNetworkWithRetry();
 
-    // Check and request location permission
     const hasLocationPermission = await checkAndRequestLocationPermission();
     if (!hasLocationPermission) {
       showToast('Location permission is required for attendance', 'error');
@@ -110,6 +110,7 @@ export const punchIn = () => async dispatch => {
       });
       return { success: false, error: 'LOCATION_PERMISSION_DENIED' };
     }
+
     const location = await getLocationWithTimeout();
     const { latitude, longitude } = location;
 
@@ -138,13 +139,15 @@ export const punchIn = () => async dispatch => {
       includeBase64: false,
     });
 
+    // 🔥 FIX: Handle camera cancel - just return without error
     if (cameraResult.didCancel) {
-      dispatch({ type: types.PUNCH_IN_FAIL, payload: 'Camera cancelled' });
-      return { success: false, error: 'CAMERA_CANCELLED' };
+      console.log('📸 Camera cancelled by user');
+      dispatch({ type: types.PUNCH_IN_CANCEL }); // Add this action type
+      return { success: false, cancelled: true }; // Return cancelled flag
     }
 
     if (!cameraResult.assets || cameraResult.assets.length === 0) {
-      showToast('Failed to capture image', 'error');
+      console.log('📸 No image captured');
       dispatch({ type: types.PUNCH_IN_FAIL, payload: 'No image captured' });
       return { success: false, error: 'NO_IMAGE' };
     }
@@ -180,22 +183,12 @@ export const punchIn = () => async dispatch => {
     const response = await apiService.upload('/attendance/punch-in', formData);
 
     console.log('📡 Response status:', response.status);
-    console.log('📡 Response data:', JSON.stringify(response.data, null, 2));
 
-    if (response.status === 409) {
-      showToast('Already punched in today!', 'info');
-      return { success: false, error: 'ALREADY_PUNCHED_IN' };
-    }
-
-    if (response.status !== 200 && response.status !== 201) {
-      throw new Error(response.data?.message || 'Punch in failed');
-    }
-
-    console.log('✅ Punch in successful');
     dispatch({
       type: types.PUNCH_IN_SUCCESS,
       payload: response.data?.data || response.data,
     });
+
     showToast('Attendance marked successfully!', 'success');
     await dispatch(getAttendanceHistory());
 
@@ -203,34 +196,43 @@ export const punchIn = () => async dispatch => {
   } catch (error) {
     console.log('❌ Punch in error:', error.message);
 
-    let errorMessage = 'Punch in failed';
+    let errorMessage = 'Something went wrong';
     let errorType = 'UNKNOWN_ERROR';
+
+    // 🔥 FIX: Don't show toast for camera cancel
+    if (error.message === 'CAMERA_CANCELLED') {
+      dispatch({ type: types.PUNCH_IN_FAIL, payload: 'Camera cancelled' });
+      return { success: false, cancelled: true };
+    }
 
     if (error.response?.status === 409) {
       errorMessage = 'Already punched in today!';
       errorType = 'ALREADY_PUNCHED_IN';
+      showToast(errorMessage, 'info');
     } else if (error.message === 'NO_INTERNET') {
       errorMessage = 'No internet connection';
       errorType = 'NO_INTERNET';
+      showToast(errorMessage, 'error');
     } else if (error.message === 'LOCATION_TIMEOUT') {
       errorMessage = 'Location timeout. Please enable GPS.';
       errorType = 'LOCATION_TIMEOUT';
-    } else if (error.message === 'LOCATION_FAILED') {
-      errorMessage = 'Failed to get location. Please enable GPS.';
-      errorType = 'LOCATION_FAILED';
+      showToast(errorMessage, 'error');
     } else if (error.message === 'CAMERA_TIMEOUT') {
       errorMessage = 'Camera not responding. Please restart app.';
       errorType = 'CAMERA_TIMEOUT';
+      showToast(errorMessage, 'error');
+    } else if (!error.response) {
+      errorMessage = 'Network error, please try again';
+      showToast(errorMessage, 'error');
     } else {
-      errorMessage =
-        error.response?.data?.message || error.message || 'Punch in failed';
-    }
-
-    dispatch({ type: types.PUNCH_IN_FAIL, payload: errorMessage });
-
-    if (errorType !== 'CAMERA_CANCELLED') {
+      errorMessage = error.response?.data?.message || 'Punch in failed';
       showToast(errorMessage, 'error');
     }
+
+    dispatch({
+      type: types.PUNCH_IN_FAIL,
+      payload: errorMessage,
+    });
 
     return { success: false, error: errorType, message: errorMessage };
   }
@@ -244,7 +246,6 @@ export const punchOut = () => async dispatch => {
 
     await checkNetworkWithRetry();
 
-    // Check and request location permission
     const hasLocationPermission = await checkAndRequestLocationPermission();
     if (!hasLocationPermission) {
       showToast('Location permission is required for attendance', 'error');
@@ -283,13 +284,15 @@ export const punchOut = () => async dispatch => {
       includeBase64: false,
     });
 
+    // 🔥 FIX: Handle camera cancel - return early, no toast
     if (cameraResult.didCancel) {
-      dispatch({ type: types.PUNCH_OUT_FAIL, payload: 'Camera cancelled' });
-      return { success: false, error: 'CAMERA_CANCELLED' };
+      console.log('📸 Camera cancelled by user');
+      dispatch({ type: types.PUNCH_OUT_CANCEL }); // Add this action
+      return { success: false, cancelled: true };
     }
 
     if (!cameraResult.assets || cameraResult.assets.length === 0) {
-      showToast('Failed to capture image', 'error');
+      console.log('📸 No image captured');
       dispatch({ type: types.PUNCH_OUT_FAIL, payload: 'No image captured' });
       return { success: false, error: 'NO_IMAGE' };
     }
@@ -318,7 +321,6 @@ export const punchOut = () => async dispatch => {
     const response = await apiService.upload('/attendance/punch-out', formData);
 
     console.log('📡 Response status:', response.status);
-    console.log('📡 Response data:', JSON.stringify(response.data, null, 2));
 
     if (response.status === 400) {
       const msg = response.data?.message || 'Not punched in yet';
@@ -359,7 +361,8 @@ export const punchOut = () => async dispatch => {
 
     dispatch({ type: types.PUNCH_OUT_FAIL, payload: errorMessage });
 
-    if (error.message !== 'CAMERA_CANCELLED') {
+    // Only show toast for non-cancel errors
+    if (!error.message?.includes('cancelled')) {
       showToast(errorMessage, 'error');
     }
 
@@ -370,53 +373,55 @@ export const punchOut = () => async dispatch => {
 // ==================== GET ATTENDANCE HISTORY ====================
 // attendanceActions.js - Add SESSION_EXPIRED handling
 
-export const getAttendanceHistory = (params = {}) => async dispatch => {
-  try {
-    console.log('📊 Fetching attendance history...');
-    dispatch({ type: types.ATTENDANCE_HISTORY_REQUEST });
+export const getAttendanceHistory =
+  (params = {}) =>
+  async dispatch => {
+    try {
+      console.log('📊 Fetching attendance history...');
+      dispatch({ type: types.ATTENDANCE_HISTORY_REQUEST });
 
-    const queryParams = new URLSearchParams();
-    if (params.month) queryParams.append('month', params.month);
-    if (params.year) queryParams.append('year', params.year);
-    if (params.limit) queryParams.append('limit', params.limit);
+      const queryParams = new URLSearchParams();
+      if (params.month) queryParams.append('month', params.month);
+      if (params.year) queryParams.append('year', params.year);
+      if (params.limit) queryParams.append('limit', params.limit);
 
-    const queryString = queryParams.toString();
-    const endpoint = `/attendance/history${
-      queryString ? `?${queryString}` : ''
-    }`;
+      const queryString = queryParams.toString();
+      const endpoint = `/attendance/history${
+        queryString ? `?${queryString}` : ''
+      }`;
 
-    const response = await apiService.get(endpoint);
+      const response = await apiService.get(endpoint);
 
-    if (response.status !== 200) {
-      throw new Error(response.data?.message || 'Failed to fetch history');
+      if (response.status !== 200) {
+        throw new Error(response.data?.message || 'Failed to fetch history');
+      }
+
+      const historyData = response.data?.data || [];
+      console.log('✅ History fetched:', historyData);
+
+      dispatch({
+        type: types.ATTENDANCE_HISTORY_SUCCESS,
+        payload: historyData,
+      });
+      return { success: true, data: historyData };
+    } catch (error) {
+      console.log('❌ Get history error:', error.message);
+
+      // Check for session expiry
+      if (error.message === 'SESSION_EXPIRED' || error.isSessionExpired) {
+        console.log('🔐 Session expired, logging out...');
+        await dispatch(logout());
+        showToast('Session expired. Please log in again.', 'error');
+        return { success: false, error: 'SESSION_EXPIRED' };
+      }
+
+      dispatch({
+        type: types.ATTENDANCE_HISTORY_FAIL,
+        payload: error.message || 'Failed to fetch history',
+      });
+      return { success: false, error: error.message };
     }
-
-    const historyData = response.data?.data || [];
-    console.log('✅ History fetched:', historyData.length, 'records');
-
-    dispatch({
-      type: types.ATTENDANCE_HISTORY_SUCCESS,
-      payload: historyData,
-    });
-    return { success: true, data: historyData };
-  } catch (error) {
-    console.log('❌ Get history error:', error.message);
-    
-    // Check for session expiry
-    if (error.message === 'SESSION_EXPIRED' || error.isSessionExpired) {
-      console.log('🔐 Session expired, logging out...');
-      await dispatch(logout());
-      showToast('Session expired. Please log in again.', 'error');
-      return { success: false, error: 'SESSION_EXPIRED' };
-    }
-    
-    dispatch({
-      type: types.ATTENDANCE_HISTORY_FAIL,
-      payload: error.message || 'Failed to fetch history',
-    });
-    return { success: false, error: error.message };
-  }
-};
+  };
 
 // ==================== GET TODAY'S ATTENDANCE ====================
 export const getTodayAttendance = () => async dispatch => {

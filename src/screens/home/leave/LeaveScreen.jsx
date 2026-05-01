@@ -399,7 +399,7 @@ const calculateLeaveDays = (
   halfDayType = 'half1',
 ) => {
   const isSingleDay = startDateStr === endDateStr;
-  const shortLeaveCount = 0.5;
+  const shortLeaveCount = 0.25;
 
   let effectiveStart = startDateStr;
   let effectiveEnd = endDateStr;
@@ -522,7 +522,7 @@ const calculateLeaveDays = (
     } else {
       if (leaveType === 'short' && isSingleDay) {
         dayCount = shortLeaveCount;
-        label = 'Short Leave (0.5 day)';
+        label = 'Short Leave (0.25 day)';
       } else if (leaveType === 'half' && isSingleDay) {
         dayCount = 0.5;
         label = 'Half Day Leave';
@@ -563,7 +563,11 @@ const calculateLeaveDays = (
     }
   }
 
-  return { total: days, breakdown, sandwichWarning };
+  return {
+    total: parseFloat(days.toFixed(2)),
+    breakdown,
+    sandwichWarning,
+  };
 };
 
 const today = new Date();
@@ -825,13 +829,19 @@ const LeaveScreen = ({ navigation }) => {
     setLeavesExpanded(v => !v);
   };
 
-  const formatLeaveDate = dateStr => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
+  // Add this helper function at the top of the component (after const declarations)
+  const formatLeaveDays = days => {
+    if (!days && days !== 0) return '0';
+    // For 0.25, show 0.25 only
+    if (days === 0.25) return '0.25';
+    // For other decimals, check if it's a whole number
+    if (Number.isInteger(days)) return days.toString();
+    // For 0.5, show 0.5 (not 0.50)
+    if (days === 0.5) return '0.5';
+    // For any other decimal, show with 2 decimals only if needed
+    const fixed = days.toFixed(2);
+    // Remove trailing .00
+    return fixed.endsWith('.00') ? fixed.slice(0, -3) : fixed;
   };
 
   const getLeaveTypeDisplay = type => {
@@ -1324,6 +1334,14 @@ const LeaveScreen = ({ navigation }) => {
     }
   };
 
+  const scrollToTop = () => {
+    setTimeout(() => {
+      if (scrollViewRef.current) {
+        scrollViewRef.current.scrollTo({ y: 0, animated: true });
+      }
+    }, 100);
+  };
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -1369,6 +1387,7 @@ const LeaveScreen = ({ navigation }) => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
+        ref={scrollViewRef}
       >
         {/* ── Month Navigator ── */}
         <View style={styles.monthNav}>
@@ -1931,7 +1950,10 @@ const LeaveScreen = ({ navigation }) => {
                   borderWidth: selectionMode === 'start' ? 1.5 : 1,
                 },
               ]}
-              onPress={() => setSelectionMode('start')}
+              onPress={() => {
+                setSelectionMode('start');
+                scrollToTop();
+              }}
             >
               <View style={styles.datePickerTop}>
                 <Calendar
@@ -1979,7 +2001,12 @@ const LeaveScreen = ({ navigation }) => {
                   opacity: !startDate ? 0.5 : 1,
                 },
               ]}
-              onPress={() => startDate && setSelectionMode('end')}
+              onPress={() => {
+                if (startDate) {
+                  setSelectionMode('end');
+                  scrollToTop();
+                }
+              }}
             >
               <View style={styles.datePickerTop}>
                 <Calendar
@@ -2558,7 +2585,7 @@ const LeaveScreen = ({ navigation }) => {
                 <Info size={wp('3%')} color={C.info} />
                 <Text style={[styles.shortLeaveNoteText, { color: C.info }]}>
                   {t?.leave?.shortLeaveNote ||
-                    'Short leave counts as 0.5 day deduction. Only valid for single-day selection.'}
+                    'Short leave counts as 0.25 day deduction. Only valid for single-day selection.'}
                 </Text>
               </View>
             </View>
@@ -2578,9 +2605,7 @@ const LeaveScreen = ({ navigation }) => {
               <View style={styles.leaveResultMain}>
                 <View style={styles.leaveResultCountWrap}>
                   <Text style={[styles.leaveResultCount, { color: C.primary }]}>
-                    {leaveCalc.total % 1 === 0
-                      ? leaveCalc.total
-                      : leaveCalc.total.toFixed(1)}
+                    {formatLeaveDays(leaveCalc.total)}
                   </Text>
                   <Text
                     style={[styles.leaveResultUnit, { color: C.textSecondary }]}
@@ -2665,7 +2690,7 @@ const LeaveScreen = ({ navigation }) => {
               </View>
 
               {/* Sandwich Warning */}
-              {leaveCalc.sandwichWarning && (
+              {/* {leaveCalc.sandwichWarning && (
                 <View
                   style={[
                     styles.sandwichWarningRow,
@@ -2682,10 +2707,10 @@ const LeaveScreen = ({ navigation }) => {
                     {leaveCalc.sandwichWarning.message}
                   </Text>
                 </View>
-              )}
+              )} */}
 
               {/* Sandwich counted days */}
-              {leaveCalc.breakdown.some(b => b.isSandwich) && (
+              {/* {leaveCalc.breakdown.some(b => b.isSandwich) && (
                 <View
                   style={[
                     styles.freeNoteRow,
@@ -2703,6 +2728,7 @@ const LeaveScreen = ({ navigation }) => {
                   </Text>
                 </View>
               )}
+               */}
 
               {/* Free days note */}
               {leaveCalc.breakdown.some(b => b.count === 0) && (
@@ -2858,13 +2884,9 @@ const LeaveScreen = ({ navigation }) => {
                   ]}
                 >
                   {`${t?.leave?.applyBtn || 'Apply Leave'}${
-                    leaveCalc
-                      ? ` · ${
-                          leaveCalc.total % 1 === 0
-                            ? leaveCalc.total
-                            : leaveCalc.total.toFixed(1)
-                        } ${
-                          leaveCalc.total > 1
+                    leaveCalc && leaveCalc.total !== undefined
+                      ? ` · ${formatLeaveDays(leaveCalc.total)} ${
+                          parseFloat(leaveCalc.total) > 1
                             ? t?.leave?.daysLabel || 'Days'
                             : t?.leave?.dayLabel || 'Day'
                         }`
@@ -2958,6 +2980,7 @@ const LeaveScreen = ({ navigation }) => {
                 style={styles.leavesScrollView}
                 nestedScrollEnabled={true}
                 showsVerticalScrollIndicator={true}
+                // ref={scrollViewRef}
               >
                 {myLeaves
                   .slice()
@@ -3773,8 +3796,7 @@ const LeaveScreen = ({ navigation }) => {
                 'Your leave request has been submitted successfully and is pending approval.'}
             </Text>
 
-            {/* Inside success modal, after successSubtitle and before summary pills */}
-            {((leaveType === 'short' && leaveCalc?.total > shortRemaining) ||
+            {/* {((leaveType === 'short' && leaveCalc?.total > shortRemaining) ||
               (leaveType !== 'short' && leaveCalc?.total > totalRemaining)) && (
               <View
                 style={[
@@ -3787,21 +3809,14 @@ const LeaveScreen = ({ navigation }) => {
                 ]}
               >
                 <AlertTriangle size={wp('4%')} color={C.warning} />
-                <Text style={[styles.lopWarningText, { color: C.warning }]}>
-                  ⚠️ Insufficient balance!{' '}
-                  {leaveType === 'short'
-                    ? `${(leaveCalc.total - shortRemaining).toFixed(
-                        1,
-                      )} short leave day(s)`
-                    : `${(leaveCalc.total - totalRemaining).toFixed(
-                        1,
-                      )} day(s)`}{' '}
-                  will be deducted as LOP
-                </Text>
+                {leaveType === 'short'
+                  ? `${formatLeaveDays(leaveCalc.total - shortRemaining)} short leave day(s)`
+                  : `${formatLeaveDays(leaveCalc.total - totalRemaining)} day(s)`}
               </View>
-            )}
+            )} */}
 
             {/* Summary pill row */}
+            {/* Summary pill row - FIXED */}
             <View style={styles.successSummaryRow}>
               <View
                 style={[
@@ -3814,12 +3829,14 @@ const LeaveScreen = ({ navigation }) => {
               >
                 <CalendarDays size={wp('3.5%')} color={C.primary} />
                 <Text style={[styles.successSummaryText, { color: C.primary }]}>
-                  {formatDate(startDate)}
+                  {startDate ? formatDate(startDate) : ''}
                   {endDate && endDate !== startDate
                     ? `  →  ${formatDate(endDate)}`
                     : ''}
                 </Text>
               </View>
+
+              {/* 🔥 FIX: Add null check for leaveCalc */}
               {leaveCalc && (
                 <View
                   style={[
@@ -3834,10 +3851,8 @@ const LeaveScreen = ({ navigation }) => {
                   <Text
                     style={[styles.successSummaryText, { color: C.success }]}
                   >
-                    {leaveCalc.total % 1 === 0
-                      ? leaveCalc.total
-                      : leaveCalc.total.toFixed(1)}{' '}
-                    {leaveCalc.total > 1
+                    {formatLeaveDays(leaveCalc.total)}{' '}
+                    {parseFloat(leaveCalc.total) > 1
                       ? t?.leave?.daysLabel || 'Days'
                       : t?.leave?.dayLabel || 'Day'}{' '}
                     ·{' '}
@@ -3850,6 +3865,45 @@ const LeaveScreen = ({ navigation }) => {
                 </View>
               )}
             </View>
+
+            {/* Leave Status from API */}
+            {/* {leaveResponse?.status && (
+              <View
+                style={[
+                  styles.leaveStatusBadge,
+                  {
+                    backgroundColor:
+                      leaveResponse.status === 'PENDING'
+                        ? C.warning + '20'
+                        : C.success + '20',
+                    borderColor:
+                      leaveResponse.status === 'PENDING'
+                        ? C.warning
+                        : C.success,
+                  },
+                ]}
+              >
+                <Clock
+                  size={wp('3.5%')}
+                  color={
+                    leaveResponse.status === 'PENDING' ? C.warning : C.success
+                  }
+                />
+                <Text
+                  style={[
+                    styles.leaveStatusText,
+                    {
+                      color:
+                        leaveResponse.status === 'PENDING'
+                          ? C.warning
+                          : C.success,
+                    },
+                  ]}
+                >
+                  {leaveResponse.status}
+                </Text>
+              </View>
+            )} */}
 
             {/* Leave Status from API */}
             {leaveResponse?.status && (
@@ -4103,6 +4157,7 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.medium,
     flex: 1,
     textAlign: 'left',
+    lineHeight: 15,
   },
   leavePanelTitle: { fontSize: wp('4%'), fontFamily: Fonts.bold, flex: 1 },
   clearBtn: {
@@ -4586,10 +4641,10 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   balanceCard: {
-    width: wp('22%'),
+    // width: wp('30%'),
     borderRadius: wp('3%'),
     borderWidth: 1,
-    padding: wp('2.5%'),
+    padding: wp('3%'),
     gap: hp('0.4%'),
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
