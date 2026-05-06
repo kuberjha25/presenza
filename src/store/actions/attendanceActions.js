@@ -240,139 +240,297 @@ export const punchIn = () => async dispatch => {
 
 // ==================== PUNCH OUT ====================
 export const punchOut = () => async dispatch => {
+  let formData = null; // ✅ Initialize outside try-catch for cleanup
+
   try {
     console.log('📝 PUNCH OUT: Starting...');
     dispatch({ type: types.PUNCH_OUT_REQUEST });
 
-    await checkNetworkWithRetry();
-
-    const hasLocationPermission = await checkAndRequestLocationPermission();
-    if (!hasLocationPermission) {
-      showToast('Location permission is required for attendance', 'error');
-      dispatch({
-        type: types.PUNCH_OUT_FAIL,
-        payload: 'Location permission denied',
-      });
-      return { success: false, error: 'LOCATION_PERMISSION_DENIED' };
-    }
-
-    const location = await getLocationWithTimeout();
-    const { latitude, longitude } = location;
-
-    let address = `${latitude}, ${longitude}`;
+    // ✅ FIX: Wrap network check in try-catch
     try {
-      address = await getAddressFromCoords(latitude, longitude);
-    } catch (e) {
-      console.log('⚠️ Address fetch failed, using coords');
-    }
-
-    const hasCameraPermission = await requestCameraPermission();
-    if (!hasCameraPermission) {
-      showToast('Camera permission is required', 'error');
+      await checkNetworkWithRetry();
+    } catch (error) {
+      console.log('❌ Network check failed:', error.message);
       dispatch({
         type: types.PUNCH_OUT_FAIL,
-        payload: 'Camera permission denied',
+        payload: 'No internet connection',
       });
-      return { success: false, error: 'CAMERA_PERMISSION_DENIED' };
+      showToast(
+        'No internet connection. Please check your connection.',
+        'error',
+      );
+      return { success: false, error: 'NO_INTERNET' };
     }
 
-    const cameraResult = await openCameraWithTimeout({
-      mediaType: 'photo',
-      cameraType: 'front',
-      quality: 0.7,
-      saveToPhotos: false,
-      includeBase64: false,
-    });
+    // ✅ FIX: Wrap location in try-catch
+    let latitude, longitude, address;
+    try {
+      const hasLocationPermission = await checkAndRequestLocationPermission();
+      if (!hasLocationPermission) {
+        console.log('❌ Location permission denied');
+        dispatch({
+          type: types.PUNCH_OUT_FAIL,
+          payload: 'Location permission denied',
+        });
+        showToast('Location permission is required for punch out', 'error');
+        return { success: false, error: 'LOCATION_PERMISSION_DENIED' };
+      }
 
-    // 🔥 FIX: Handle camera cancel - return early, no toast
-    if (cameraResult.didCancel) {
-      console.log('📸 Camera cancelled by user');
-      dispatch({ type: types.PUNCH_OUT_CANCEL }); // Add this action
-      return { success: false, cancelled: true };
+      const location = await getLocationWithTimeout();
+      latitude = location.latitude;
+      longitude = location.longitude;
+
+      address = `${latitude}, ${longitude}`;
+      try {
+        const fetchedAddress = await getAddressFromCoords(latitude, longitude);
+        address = fetchedAddress;
+      } catch (e) {
+        console.log('⚠️ Address fetch failed, using coords');
+      }
+    } catch (error) {
+      console.log('❌ Location error:', error.message);
+      dispatch({ type: types.PUNCH_OUT_FAIL, payload: error.message });
+
+      // Show specific error message
+      if (error.message === 'LOCATION_TIMEOUT') {
+        showToast(
+          'Location timeout. Please enable GPS and try again.',
+          'error',
+        );
+      } else {
+        showToast('Failed to get location. Please try again.', 'error');
+      }
+      return { success: false, error: error.message };
     }
 
-    if (!cameraResult.assets || cameraResult.assets.length === 0) {
-      console.log('📸 No image captured');
-      dispatch({ type: types.PUNCH_OUT_FAIL, payload: 'No image captured' });
-      return { success: false, error: 'NO_IMAGE' };
+    // ✅ FIX: Wrap camera in try-catch
+    let photo, compressedImage;
+    try {
+      const hasCameraPermission = await requestCameraPermission();
+      if (!hasCameraPermission) {
+        console.log('❌ Camera permission denied');
+        dispatch({
+          type: types.PUNCH_OUT_FAIL,
+          payload: 'Camera permission denied',
+        });
+        showToast('Camera permission is required for punch out', 'error');
+        return { success: false, error: 'CAMERA_PERMISSION_DENIED' };
+      }
+
+      const cameraResult = await openCameraWithTimeout({
+        mediaType: 'photo',
+        cameraType: 'front',
+        quality: 0.7,
+        saveToPhotos: false,
+        includeBase64: false,
+      });
+
+      // ✅ FIX: Handle camera cancel properly
+      if (cameraResult.didCancel) {
+        console.log('📸 Camera cancelled by user');
+        dispatch({ type: types.PUNCH_OUT_CANCEL });
+        return { success: false, cancelled: true };
+      }
+
+      if (!cameraResult.assets || cameraResult.assets.length === 0) {
+        console.log('📸 No image captured');
+        dispatch({ type: types.PUNCH_OUT_FAIL, payload: 'No image captured' });
+        showToast('No photo captured. Please try again.', 'error');
+        return { success: false, error: 'NO_IMAGE' };
+      }
+
+      photo = cameraResult.assets[0];
+
+      // ✅ FIX: Wrap image compression in try-catch
+      try {
+        compressedImage = await compressImage(photo.uri);
+      } catch (error) {
+        console.log('❌ Image compression failed:', error.message);
+        showToast('Failed to process image. Please try again.', 'error');
+        dispatch({
+          type: types.PUNCH_OUT_FAIL,
+          payload: 'Image compression failed',
+        });
+        return { success: false, error: 'IMAGE_COMPRESSION_FAILED' };
+      }
+    } catch (error) {
+      console.log('❌ Camera error:', error.message);
+      dispatch({ type: types.PUNCH_OUT_FAIL, payload: error.message });
+
+      if (error.message === 'CAMERA_TIMEOUT') {
+        showToast('Camera not responding. Please restart the app.', 'error');
+      } else {
+        showToast('Camera error. Please try again.', 'error');
+      }
+      return { success: false, error: error.message };
     }
 
-    const photo = cameraResult.assets[0];
-    const compressedImage = await compressImage(photo.uri);
+    // ✅ FIX: Prepare FormData with error handling
+    try {
+      formData = new FormData();
+      formData.append('latitude', String(latitude));
+      formData.append('longitude', String(longitude));
+      formData.append('address', address);
+      formData.append('timestamp', String(Date.now()));
 
-    const formData = new FormData();
-    formData.append('latitude', String(latitude));
-    formData.append('longitude', String(longitude));
-    formData.append('address', address);
-    formData.append('timestamp', String(Date.now()));
+      let fileUri = compressedImage.uri;
+      if (Platform.OS === 'android' && !fileUri.startsWith('file://')) {
+        fileUri = 'file://' + fileUri;
+      }
 
-    let fileUri = compressedImage.uri;
-    if (Platform.OS === 'android' && !fileUri.startsWith('file://')) {
-      fileUri = 'file://' + fileUri;
+      formData.append('image', {
+        uri: fileUri,
+        type: photo.type || 'image/jpeg',
+        name: photo.fileName || `selfie_${Date.now()}.jpg`,
+      });
+    } catch (error) {
+      console.log('❌ FormData preparation failed:', error.message);
+      dispatch({
+        type: types.PUNCH_OUT_FAIL,
+        payload: 'Failed to prepare data',
+      });
+      showToast('Failed to prepare punch out data. Please try again.', 'error');
+      return { success: false, error: 'FORMDATA_ERROR' };
     }
 
-    formData.append('image', {
-      uri: fileUri,
-      type: photo.type || 'image/jpeg',
-      name: photo.fileName || `selfie_${Date.now()}.jpg`,
-    });
-
+    // ✅ FIX: API call with comprehensive error handling
     console.log('🌐 POST /attendance/punch-out');
     const response = await apiService.upload('/attendance/punch-out', formData);
 
     console.log('📡 Response status:', response.status);
 
+    // ✅ FIX: Handle all response statuses properly
     if (response.status === 400) {
       const msg = response.data?.message || 'Not punched in yet';
+      console.log('⚠️ 400 Bad Request:', msg);
       showToast(msg, 'error');
-      return { success: false, error: 'NOT_PUNCHED_IN' };
+      dispatch({ type: types.PUNCH_OUT_FAIL, payload: msg });
+      return { success: false, error: 'NOT_PUNCHED_IN', message: msg };
+    }
+
+    if (response.status === 401) {
+      console.log('⚠️ 401 Unauthorized - Session expired');
+      dispatch({ type: types.PUNCH_OUT_FAIL, payload: 'Session expired' });
+      await dispatch(logout());
+      showToast('Session expired. Please log in again.', 'error');
+      return { success: false, error: 'SESSION_EXPIRED' };
+    }
+
+    if (response.status === 403) {
+      const msg = response.data?.message || 'Not allowed';
+      console.log('⚠️ 403 Forbidden:', msg);
+      showToast(msg, 'error');
+      dispatch({ type: types.PUNCH_OUT_FAIL, payload: msg });
+      return { success: false, error: 'FORBIDDEN', message: msg };
+    }
+
+    if (response.status === 409) {
+      const msg = response.data?.message || 'Conflict - Already punched out';
+      console.log('⚠️ 409 Conflict:', msg);
+      showToast(msg, 'info');
+      dispatch({ type: types.PUNCH_OUT_FAIL, payload: msg });
+      return { success: false, error: 'ALREADY_PUNCHED_OUT', message: msg };
+    }
+
+    if (response.status === 500) {
+      console.log('⚠️ 500 Server Error');
+      showToast('Server error. Please try again later.', 'error');
+      dispatch({ type: types.PUNCH_OUT_FAIL, payload: 'Server error' });
+      return { success: false, error: 'SERVER_ERROR' };
     }
 
     if (response.status !== 200 && response.status !== 201) {
-      throw new Error(response.data?.message || 'Punch out failed');
+      const msg = response.data?.message || `HTTP ${response.status} error`;
+      console.log('⚠️ Unexpected status:', response.status, msg);
+      showToast(msg, 'error');
+      dispatch({ type: types.PUNCH_OUT_FAIL, payload: msg });
+      return { success: false, error: 'HTTP_ERROR', message: msg };
     }
 
+    // ✅ FIX: Verify response data
+    if (!response.data) {
+      console.log('⚠️ No response data received');
+      showToast('Invalid response from server. Please try again.', 'error');
+      dispatch({ type: types.PUNCH_OUT_FAIL, payload: 'No response data' });
+      return { success: false, error: 'NO_RESPONSE_DATA' };
+    }
+
+    if (response.data?.success === false) {
+      const msg = response.data?.message || 'Punch out failed';
+      console.log('❌ Response success: false -', msg);
+      showToast(msg, 'error');
+      dispatch({ type: types.PUNCH_OUT_FAIL, payload: msg });
+      return { success: false, error: 'RESPONSE_ERROR', message: msg };
+    }
+
+    // ✅ SUCCESS
     console.log('✅ Punch out successful');
     dispatch({
       type: types.PUNCH_OUT_SUCCESS,
       payload: response.data?.data || response.data,
     });
     showToast('Punch out successful!', 'success');
-    await dispatch(getAttendanceHistory());
+
+    // ✅ Refresh attendance history
+    try {
+      await dispatch(getAttendanceHistory());
+    } catch (e) {
+      console.log('⚠️ Failed to refresh history after punch out:', e.message);
+    }
 
     return { success: true, data: response.data?.data };
   } catch (error) {
-    console.log('❌ Punch out error:', error.message);
+    console.log('❌ Punch out error:', error);
+    console.log('Error message:', error.message);
+    console.log('Error code:', error.code);
 
-    let errorMessage = 'Punch out failed';
+    let errorMessage = 'Punch out failed. Please try again.';
 
-    if (error.response?.status === 400) {
-      errorMessage = error.response.data?.message || 'Not punched in yet';
+    // ✅ FIX: Comprehensive error handling
+    if (!error) {
+      errorMessage = 'Unknown error occurred';
     } else if (error.message === 'NO_INTERNET') {
       errorMessage = 'No internet connection';
     } else if (error.message === 'LOCATION_TIMEOUT') {
       errorMessage = 'Location timeout. Please enable GPS.';
     } else if (error.message === 'CAMERA_TIMEOUT') {
-      errorMessage = 'Camera not responding. Please restart app.';
-    } else {
-      errorMessage =
-        error.response?.data?.message || error.message || 'Punch out failed';
+      errorMessage = 'Camera not responding. Please restart the app.';
+    } else if (error.code === 'ECONNABORTED') {
+      errorMessage = 'Request timeout. Please check your connection.';
+    } else if (error.code === 'ENOTFOUND') {
+      errorMessage = 'Cannot reach server. Check your internet.';
+    } else if (error.response?.status === 400) {
+      errorMessage = error.response?.data?.message || 'Invalid request';
+    } else if (error.response?.status === 401) {
+      errorMessage = 'Session expired. Please log in again.';
+    } else if (error.response?.status === 409) {
+      errorMessage = error.response?.data?.message || 'Already punched out';
+    } else if (error.response?.status >= 500) {
+      errorMessage = 'Server error. Please try again later.';
+    } else if (error.response?.data?.message) {
+      errorMessage = error.response.data.message;
+    } else if (error.message) {
+      errorMessage = error.message;
     }
 
-    dispatch({ type: types.PUNCH_OUT_FAIL, payload: errorMessage });
+    console.log('📢 Error message to show:', errorMessage);
 
-    // Only show toast for non-cancel errors
-    if (!error.message?.includes('cancelled')) {
-      showToast(errorMessage, 'error');
-    }
+    dispatch({
+      type: types.PUNCH_OUT_FAIL,
+      payload: errorMessage,
+    });
 
-    return { success: false, error: error.message, message: errorMessage };
+    showToast(errorMessage, 'error');
+
+    return {
+      success: false,
+      error: error.message || 'UNKNOWN_ERROR',
+      message: errorMessage,
+    };
   }
 };
 
 // ==================== GET ATTENDANCE HISTORY ====================
-// attendanceActions.js - Add SESSION_EXPIRED handling
-
 export const getAttendanceHistory =
   (params = {}) =>
   async dispatch => {
@@ -397,7 +555,7 @@ export const getAttendanceHistory =
       }
 
       const historyData = response.data?.data || [];
-      console.log('✅ History fetched:', historyData);
+      console.log('✅ History fetched:', historyData, 'records');
 
       dispatch({
         type: types.ATTENDANCE_HISTORY_SUCCESS,
@@ -440,7 +598,7 @@ export const getTodayAttendance = () => async dispatch => {
     }
 
     const attendanceData = response.data?.data || null;
-    console.log("✅ Today's attendance fetched:", attendanceData);
+    console.log("✅ Today's attendance fetched");
 
     dispatch({ type: types.TODAY_ATTENDANCE_SUCCESS, payload: attendanceData });
     return { success: true, data: attendanceData };
@@ -500,7 +658,6 @@ export const breakIn = (breakType, remarks) => async (dispatch, getState) => {
     });
 
     console.log('📡 Response status:', response.status);
-    console.log('📡 Response data:', JSON.stringify(response.data, null, 2));
 
     if (response.status === 400) {
       const msg = response.data?.message || '';
@@ -564,7 +721,6 @@ export const breakOut = (breakType, remarks) => async (dispatch, getState) => {
     });
 
     console.log('📡 Response status:', response.status);
-    console.log('📡 Response data:', JSON.stringify(response.data, null, 2));
 
     if (response.status === 400) {
       const msg = response.data?.message || '';

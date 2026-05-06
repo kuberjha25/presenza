@@ -88,8 +88,10 @@ export const sendOtp = emp => async dispatch => {
   try {
     dispatch({ type: SEND_OTP_REQUEST });
 
+    const cleanEmployeeId = emp.trim().toUpperCase();
+
     const payload = {
-      employeeCode: emp.trim(),
+      employeeCode: cleanEmployeeId,
       device: {
         deviceId: await DeviceInfo.getUniqueId(),
         deviceType: 'MOBILE',
@@ -115,14 +117,17 @@ export const sendOtp = emp => async dispatch => {
 
     dispatch({
       type: SEND_OTP_SUCCESS,
-      payload: { employeeCode: emp.trim(), message: data.message },
+      payload: {
+        employeeCode: cleanEmployeeId,
+        message: data.message,
+      },
     });
 
     showToast('OTP sent successfully', 'success');
     return {
       success: true,
       step: data.step,
-      employeeCode: emp.trim(),
+      employeeCode: cleanEmployeeId,
     };
   } catch (error) {
     console.log('Send OTP error:', error);
@@ -140,8 +145,11 @@ export const resendOtp = emp => async dispatch => {
   try {
     dispatch({ type: SEND_OTP_REQUEST });
 
+    // ✅ FIX: Use the emp parameter passed from VerifyOTP screen, not from state
+    const cleanEmployeeId = emp.trim().toUpperCase();
+
     const payload = {
-      employeeCode: emp.trim().toLowerCase(),
+      employeeCode: cleanEmployeeId,
       device: {
         deviceId: await DeviceInfo.getUniqueId(),
         deviceType: 'MOBILE',
@@ -167,7 +175,7 @@ export const resendOtp = emp => async dispatch => {
 
     dispatch({
       type: SEND_OTP_SUCCESS,
-      payload: { employeeCode: emp.trim().toLowerCase() },
+      payload: { employeeCode: cleanEmployeeId },
     });
 
     return { success: true };
@@ -402,58 +410,6 @@ export const resetAppState = () => ({
   type: RESET_APP_STATE,
 });
 
-// // ==================== HELPER FUNCTIONS ====================
-// const saveCredentialsToKeychain = async (
-//   email,
-//   accessToken,
-//   refreshToken,
-//   user,
-// ) => {
-//   try {
-//     const credentials = JSON.stringify({
-//       email,
-//       accessToken,
-//       refreshToken,
-//       user,
-//     });
-
-//     await Keychain.setInternetCredentials(
-//       'com.presenza.app',
-//       'user_credentials',
-//       credentials,
-//     );
-
-//     await EncryptedStorage.setItem(
-//       'auth_tokens',
-//       JSON.stringify({
-//         accessToken,
-//         refreshToken,
-//       }),
-//     );
-
-//     return true;
-//   } catch (error) {
-//     console.log('Save credentials error:', error);
-//     return false;
-//   }
-// };
-
-// const getCredentialsFromKeychain = async () => {
-//   try {
-//     const credentials = await Keychain.getInternetCredentials(
-//       'com.presenza.app',
-//     );
-//     if (credentials) {
-//       return JSON.parse(credentials.password);
-//     }
-//     return null;
-//   } catch (error) {
-//     console.log('Get credentials error:', error);
-//     return null;
-//   }
-// };
-
-// ==================== CHECK AUTH STATE ====================
 // ==================== CHECK AUTH STATE ====================
 export const checkAuthState = () => async dispatch => {
   try {

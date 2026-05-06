@@ -157,7 +157,8 @@ export const MeetingsScreen = ({ navigation }) => {
   const filteredEmployees = useMemo(() => {
     if (!employeesList || employeesList.length === 0) return [];
     let filtered = employeesList.filter(
-      employee => employee._id !== user?._id && employee.email !== user?.email,
+      // employee => employee._id !== user?._id && employee.email !== user?.email,
+        employee => employee._id !== user?._id
     );
     if (!employeeSearchQuery.trim()) return filtered;
     const query = employeeSearchQuery.toLowerCase();

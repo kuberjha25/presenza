@@ -65,6 +65,21 @@ const CustomHeader = ({
     );
   };
 
+  // ✅ FIX: Truncate name to 5 characters max
+  const getDisplayName = name => {
+    if (!name) return 'User';
+    // Get first name only
+    const firstName = name.split(' ')[0];
+    // If first name is 5 chars or less, show it fully
+    if (firstName.length <= 7) {
+      return firstName;
+    }
+    // If longer than 5, truncate with ellipsis
+    return firstName.substring(0, 5) + '...';
+  };
+
+  const displayName = getDisplayName(userName);
+
   return (
     <>
       <StatusBar
@@ -84,18 +99,22 @@ const CustomHeader = ({
               <ArrowLeft size={wp('5%')} color={C.textPrimary} />
             </TouchableOpacity>
           ) : (
-            // <View style={styles.logoSection}>
-            //    <Image source={logo} style={[styles.logo, { borderColor: C.primary }]} />
-            //   <Text style={[styles.appName, { color: C.primary }]}>Presenza</Text>
-            // </View>
-            <View>
+            // ✅ FIX: Show truncated name here
+            <View style={styles.greetingSection}>
               <Text style={[styles.greeting, { color: C.textSecondary }]}>
                 {greeting || 'Hello,'}
               </Text>
-              <Text style={[styles.name, { color: C.textPrimary }]}>
-                {userName || 'User'}
+              <Text
+                style={[styles.name, { color: C.textPrimary }]}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {displayName}
               </Text>
-              <Text style={[styles.date, { color: C.textSecondary }]}>
+              <Text
+                style={[styles.date, { color: C.textSecondary }]}
+                numberOfLines={1}
+              >
                 {date}
               </Text>
             </View>
@@ -141,12 +160,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: wp('5%'),
     paddingTop: Platform.OS === 'ios' ? hp('6%') : hp('5%'),
+    paddingBottom: hp('1.5%'),
     borderBottomWidth: 1,
     borderBottomColor: 'transparent',
   },
   leftSection: {
     flex: 1,
     alignItems: 'flex-start',
+    minWidth: 0, // ✅ Important for text truncation
   },
   centerSection: {
     flex: 2,
@@ -171,10 +192,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     resizeMode: 'cover',
   },
-  appName: {
-    fontSize: wp('4%'),
-    fontFamily: Fonts.medium,
-    letterSpacing: wp('0.1%'),
+  greetingSection: {
+    minWidth: 0, // ✅ Important for text truncation
   },
   title: {
     fontSize: wp('4.5%'),
@@ -185,34 +204,36 @@ const styles = StyleSheet.create({
     paddingRight: wp('4%'),
   },
   greeting: {
-  fontSize: wp('3.2%'),
-  fontFamily: Fonts.regular,
-},
+    fontSize: wp('3.2%'),
+    fontFamily: Fonts.regular,
+  },
 
-name: {
-  fontSize: wp('5%'),
-  fontFamily: Fonts.bold,
-  marginTop: hp('0.5%'),
-},
+  name: {
+    fontSize: wp('4.5%'), // ✅ Reduced from 5% for better fit
+    fontFamily: Fonts.bold,
+    marginTop: hp('0.3%'),
+    maxWidth: wp('40%'), // ✅ Constrain width
+  },
 
-date: {
-  fontSize: wp('2.8%'),
-  fontFamily: Fonts.regular,
-  marginTop: 2,
-},
+  date: {
+    fontSize: wp('2.8%'),
+    fontFamily: Fonts.regular,
+    marginTop: hp('0.3%'),
+    maxWidth: wp('40%'), // ✅ Constrain width
+  },
 
-avatar: {
-  width: wp('10%'),
-  height: wp('10%'),
-  borderRadius: wp('5%'),
-  justifyContent: 'center',
-  alignItems: 'center',
-},
+  avatar: {
+    width: wp('10%'),
+    height: wp('10%'),
+    borderRadius: wp('5%'),
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
-avatarText: {
-  fontSize: wp('4%'),
-  fontFamily: Fonts.bold,
-},
+  avatarText: {
+    fontSize: wp('4%'),
+    fontFamily: Fonts.bold,
+  },
 });
 
 export default CustomHeader;

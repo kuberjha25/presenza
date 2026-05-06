@@ -36,6 +36,7 @@ import { showToast } from '../../components/common/ToastProvider';
 import { RESET_SEND_OTP } from '../../store/reducers/authReducer';
 
 const VerifyOTP = ({ route, navigation }) => {
+  // ✅ FIX: Get the correct employeeId from route params (passed from LoginScreen)
   const { employeeId } = route.params;
   const dispatch = useDispatch();
   const { theme } = useTheme();
@@ -89,7 +90,10 @@ const VerifyOTP = ({ route, navigation }) => {
 
     const otpString = otp.join('');
     if (otpString.length !== 6) {
-      showToast(t.alerts.otpError || 'Please enter complete 6-digit OTP', 'error');
+      showToast(
+        t.alerts.otpError || 'Please enter complete 6-digit OTP',
+        'error',
+      );
       return;
     }
 
@@ -109,6 +113,7 @@ const VerifyOTP = ({ route, navigation }) => {
     setDisabledd(true);
     if (!canResend) return;
 
+    // ✅ FIX: Pass the employeeId from route params to resendOtp
     console.log('📧 Resending OTP for employee ID:', employeeId);
     const result = await dispatch(resendOtp(employeeId));
     if (result.success) {
@@ -133,7 +138,9 @@ const VerifyOTP = ({ route, navigation }) => {
       <StatusBar barStyle={C.statusBar} backgroundColor={C.background} />
 
       <View style={[styles.topShadow, { backgroundColor: C.topShadow }]} />
-      <View style={[styles.bottomShadow, { backgroundColor: C.bottomShadow }]} />
+      <View
+        style={[styles.bottomShadow, { backgroundColor: C.bottomShadow }]}
+      />
 
       <KeyboardAvoidingView
         style={styles.kavContainer}
@@ -183,7 +190,9 @@ const VerifyOTP = ({ route, navigation }) => {
               <Text style={[styles.resendText, { color: C.textSecondary }]}>
                 {canResend
                   ? t.otp.resendPrompt || "Didn't receive the code?"
-                  : `${t.otp.resendIn || 'Resend in'} 00:${timer.toString().padStart(2, '0')}`}
+                  : `${t.otp.resendIn || 'Resend in'} 00:${timer
+                      .toString()
+                      .padStart(2, '0')}`}
               </Text>
               {canResend && (
                 <TouchableOpacity
@@ -191,7 +200,8 @@ const VerifyOTP = ({ route, navigation }) => {
                   disabled={verifyOtpLoading || disabledd}
                 >
                   <Text style={[styles.resendButton, { color: C.primary }]}>
-                    {' '}{t.otp.resendButton}
+                    {' '}
+                    {t.otp.resendButton}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -212,7 +222,9 @@ const VerifyOTP = ({ route, navigation }) => {
         </Animated.View>
         <TouchableOpacity
           style={[styles.settingsButton, { backgroundColor: C.primary }]}
-          onPress={() => navigation.navigate('AuthSettings', { fromAuth: true })}
+          onPress={() =>
+            navigation.navigate('AuthSettings', { fromAuth: true })
+          }
         >
           <Settings size={wp('5%')} color={C.textDark} />
         </TouchableOpacity>
@@ -259,7 +271,11 @@ const styles = StyleSheet.create({
   kavContainer: { flex: 1 },
   animatedContainer: { flex: 1 },
   scrollView: { flex: 1, paddingHorizontal: wp('6%') },
-  scrollContent: { flexGrow: 1, paddingTop: hp('20%'), paddingBottom: hp('6%') },
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop: hp('20%'),
+    paddingBottom: hp('6%'),
+  },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -275,9 +291,21 @@ const styles = StyleSheet.create({
     marginLeft: wp('2%'),
   },
   otpHeader: { alignItems: 'center', marginBottom: hp('3%') },
-  otpTitle: { fontSize: wp('6%'), fontFamily: Fonts.medium, marginBottom: hp('1%') },
-  otpSubtitle: { fontSize: wp('3.5%'), fontFamily: Fonts.light, textAlign: 'center' },
-  otpEmail: { fontSize: wp('4%'), fontFamily: Fonts.medium, marginTop: hp('0.5%') },
+  otpTitle: {
+    fontSize: wp('6%'),
+    fontFamily: Fonts.medium,
+    marginBottom: hp('1%'),
+  },
+  otpSubtitle: {
+    fontSize: wp('3.5%'),
+    fontFamily: Fonts.light,
+    textAlign: 'center',
+  },
+  otpEmail: {
+    fontSize: wp('4%'),
+    fontFamily: Fonts.medium,
+    marginTop: hp('0.5%'),
+  },
   otpContainer: { width: '100%', marginBottom: hp('2%') },
   resendContainer: {
     flexDirection: 'row',

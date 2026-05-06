@@ -14,7 +14,7 @@ export const fetchEmployees = () => async dispatch => {
 
     const response = await apiService.get('/employee');
 
-    console.log('📡 Response status:', response.status);
+    console.log('📡 Response status:', response);
 
     if (response.status >= 200 && response.status < 300) {
       let employeesData = [];

@@ -30,6 +30,8 @@ const initialState = {
   sendOtpLoading: false,
   sendOtpSuccess: false,
   sendOtpError: null,
+  // ✅ NEW: Store employeeCode in state for use in resendOtp
+  currentEmployeeCode: null,
   sentEmail: null,
   verifyOtpLoading: false,
   verifyOtpSuccess: false,
@@ -60,6 +62,8 @@ const authReducer = (state = initialState, action) => {
         sendOtpLoading: false,
         sendOtpSuccess: true,
         sendOtpError: null,
+        // ✅ NEW: Store the employeeCode that was used for sending OTP
+        currentEmployeeCode: action.payload.employeeCode,
         sentEmail: action.payload.email,
       };
 
@@ -73,7 +77,12 @@ const authReducer = (state = initialState, action) => {
 
     // ✅ NEW: Reset karo jab OTP screen se wapas aao
     case RESET_SEND_OTP:
-      return { ...state, sendOtpSuccess: false, sendOtpError: null };
+      return {
+        ...state,
+        sendOtpSuccess: false,
+        sendOtpError: null,
+        currentEmployeeCode: null, // ✅ Clear employee code on reset
+      };
 
     case VERIFY_OTP_REQUEST:
       return {
