@@ -2660,6 +2660,10 @@ PODS:
     - Yoga
   - RNDeviceInfo (15.0.2):
     - React-Core
+  - RNFileViewer (2.1.5):
+    - React-Core
+  - RNFS (2.20.0):
+    - React-Core
   - RNPermissions (5.5.1):
     - boost
     - DoubleConversion
@@ -2896,6 +2900,8 @@ DEPENDENCIES:
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - "RNCAsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
   - RNDeviceInfo (from `../node_modules/react-native-device-info`)
+  - RNFileViewer (from `../node_modules/react-native-file-viewer`)
+  - RNFS (from `../node_modules/react-native-fs`)
   - RNPermissions (from `../node_modules/react-native-permissions`)
   - RNScreens (from `../node_modules/react-native-screens`)
   - RNSVG (from `../node_modules/react-native-svg`)
@@ -3082,6 +3088,10 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@react-native-async-storage/async-storage"
   RNDeviceInfo:
     :path: "../node_modules/react-native-device-info"
+  RNFileViewer:
+    :path: "../node_modules/react-native-file-viewer"
+  RNFS:
+    :path: "../node_modules/react-native-fs"
   RNPermissions:
     :path: "../node_modules/react-native-permissions"
   RNScreens:
@@ -3179,6 +3189,8 @@ SPEC CHECKSUMS:
   ReactCommon: ac934cb340aee91282ecd6f273a26d24d4c55cae
   RNCAsyncStorage: 29f0230e1a25f36c20b05f65e2eb8958d6526e82
   RNDeviceInfo: 4c852998208b60dc192ae3529e5867817719ad1e
+  RNFileViewer: 4b5d83358214347e4ab2d4ca8d5c1c90d869e251
+  RNFS: 89de7d7f4c0f6bafa05343c578f61118c8282ed8
   RNPermissions: 9e68f5af1024e18f44b76d83a9941b56b29a6eba
   RNScreens: 7f643ee0fd1407dc5085c7795460bd93da113b8f
   RNSVG: 3405336c4507ee0bafb02b08058d57216daa2c50

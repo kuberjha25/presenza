@@ -11,6 +11,7 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import {
   widthPercentageToDP as wp,
@@ -24,6 +25,7 @@ import { Fonts } from '../../utils/GlobalText';
 import LogoHeader from '../../components/Login/LogoHeader';
 import PrimaryButton from '../../components/common/PrimaryButton';
 import OTPInput from '../../components/common/OTPInput';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import {
   verifyOtp,
@@ -36,25 +38,79 @@ import { showToast } from '../../components/common/ToastProvider';
 import { RESET_SEND_OTP } from '../../store/reducers/authReducer';
 
 const VerifyOTP = ({ route, navigation }) => {
-  // ✅ FIX: Get the correct employeeId from route params (passed from LoginScreen)
   const { employeeId } = route.params;
   const dispatch = useDispatch();
   const { theme } = useTheme();
   const { t } = useLanguage();
   const C = theme.colors;
 
-  const [disabledd, setDisabledd] = useState(false);
-  const { verifyOtpLoading } = useSelector(state => state.auth);
-
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [timer, setTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
+  const [resendCount, setResendCount] = useState(0);
+  const [resendLoading, setResendLoading] = useState(false);
+
+  const { verifyOtpLoading, sendOtpLoading } = useSelector(state => state.auth);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(hp('3%'))).current;
 
+  // ============ TIMER PERSISTENCE FUNCTIONS ============
+  const saveTimerState = async expiryTime => {
+    try {
+      await AsyncStorage.setItem('otp_timer_expiry', expiryTime.toString());
+      await AsyncStorage.setItem('otp_employee_id', employeeId);
+    } catch (error) {
+      console.log('Error saving timer state:', error);
+    }
+  };
+
+  const loadTimerState = async () => {
+    try {
+      const savedExpiry = await AsyncStorage.getItem('otp_timer_expiry');
+      const savedEmployeeId = await AsyncStorage.getItem('otp_employee_id');
+      const savedResendCount = await AsyncStorage.getItem('otp_resend_count');
+
+      // Check if saved state exists and matches current employee
+      if (savedExpiry && savedEmployeeId === employeeId) {
+        const expiryTime = parseInt(savedExpiry, 10);
+        const now = Date.now();
+        const remainingSeconds = Math.max(
+          0,
+          Math.floor((expiryTime - now) / 1000),
+        );
+
+        if (remainingSeconds > 0) {
+          setTimer(remainingSeconds);
+          setCanResend(false);
+          return true;
+        }
+      }
+
+      if (savedResendCount && savedEmployeeId === employeeId) {
+        setResendCount(parseInt(savedResendCount, 10));
+      }
+
+      return false;
+    } catch (error) {
+      console.log('Error loading timer state:', error);
+      return false;
+    }
+  };
+
+  const clearTimerState = async () => {
+    try {
+      await AsyncStorage.removeItem('otp_timer_expiry');
+      await AsyncStorage.removeItem('otp_resend_count');
+      // Don't remove employeeId immediately, keep for comparison
+    } catch (error) {
+      console.log('Error clearing timer state:', error);
+    }
+  };
+
   useEffect(() => {
     console.log('🔐 VerifyOTP mounted for employee ID:', employeeId);
+
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -68,19 +124,35 @@ const VerifyOTP = ({ route, navigation }) => {
       }),
     ]).start();
 
-    // ✅ FIX 2 & 3: Unmount hone pe sendOtpSuccess reset karo
+    // Load saved timer state
+    loadTimerState();
+
     return () => {
       console.log('🔐 VerifyOTP unmounted');
       dispatch({ type: RESET_SEND_OTP });
+      // Don't clear timer state on unmount - we want it to persist
     };
   }, []);
 
+  // Timer effect
   useEffect(() => {
     let interval;
     if (timer > 0) {
-      interval = setInterval(() => setTimer(prev => prev - 1), 1000);
+      interval = setInterval(() => {
+        setTimer(prev => {
+          const newTimer = prev - 1;
+          // Save expiry time when timer updates
+          if (newTimer > 0) {
+            const expiryTime = Date.now() + newTimer * 1000;
+            saveTimerState(expiryTime);
+          }
+          return newTimer;
+        });
+      }, 1000);
     } else {
       setCanResend(true);
+      // Clear timer state when timer reaches 0
+      clearTimerState();
     }
     return () => clearInterval(interval);
   }, [timer]);
@@ -102,6 +174,8 @@ const VerifyOTP = ({ route, navigation }) => {
 
     if (result.success) {
       console.log('✅ OTP verified successfully');
+      // Clear timer state on successful verification
+      await clearTimerState();
       dispatch(checkAuthState());
     } else {
       setOtp(['', '', '', '', '', '']);
@@ -109,18 +183,41 @@ const VerifyOTP = ({ route, navigation }) => {
   };
 
   const handleResendOtp = async () => {
-    setOtp(['', '', '', '', '', '']);
-    setDisabledd(true);
-    if (!canResend) return;
+    // Check resend limit (max 3 attempts)
+    if (resendCount >= 3) {
+      showToast(
+        'Maximum resend limit reached (3 attempts). Please try again later.',
+        'error',
+      );
+      return;
+    }
 
-    // ✅ FIX: Pass the employeeId from route params to resendOtp
+    if (!canResend) {
+      showToast(`Please wait ${timer} seconds before resending`, 'error');
+      return;
+    }
+
+    setResendLoading(true);
+
     console.log('📧 Resending OTP for employee ID:', employeeId);
     const result = await dispatch(resendOtp(employeeId));
+
+    setResendLoading(false);
+
     if (result.success) {
+      // Increment resend count
+      const newCount = resendCount + 1;
+      setResendCount(newCount);
+      await AsyncStorage.setItem('otp_resend_count', newCount.toString());
+
       setTimer(30);
-      setDisabledd(false);
       setCanResend(false);
       setOtp(['', '', '', '', '', '']);
+
+      // Save new timer expiry
+      const expiryTime = Date.now() + 30 * 1000;
+      await saveTimerState(expiryTime);
+
       showToast(t.alerts.otpSent || 'OTP resent successfully', 'success');
     }
   };
@@ -132,6 +229,9 @@ const VerifyOTP = ({ route, navigation }) => {
       navigation.navigate('Login');
     }
   };
+
+  // Check if resend button should be disabled
+  const isResendDisabled = !canResend || resendCount >= 3 || resendLoading;
 
   return (
     <View style={[styles.rootContainer, { backgroundColor: C.background }]}>
@@ -189,23 +289,42 @@ const VerifyOTP = ({ route, navigation }) => {
               <Clock size={wp('4%')} color={C.textSecondary} />
               <Text style={[styles.resendText, { color: C.textSecondary }]}>
                 {canResend
-                  ? t.otp.resendPrompt || "Didn't receive the code?"
+                  ? resendCount >= 3
+                    ? 'Maximum attempts reached. Please try again later.'
+                    : t.otp.resendPrompt || "Didn't receive the code?"
                   : `${t.otp.resendIn || 'Resend in'} 00:${timer
                       .toString()
                       .padStart(2, '0')}`}
               </Text>
-              {canResend && (
+              {canResend && resendCount < 3 && (
                 <TouchableOpacity
                   onPress={handleResendOtp}
-                  disabled={verifyOtpLoading || disabledd}
+                  disabled={isResendDisabled}
                 >
-                  <Text style={[styles.resendButton, { color: C.primary }]}>
-                    {' '}
-                    {t.otp.resendButton}
-                  </Text>
+                  {resendLoading ? (
+                    <ActivityIndicator size="small" color={C.primary} />
+                  ) : (
+                    <Text style={[styles.resendButton, { color: C.primary }]}>
+                      {' '}
+                      {t.otp.resendButton}
+                    </Text>
+                  )}
                 </TouchableOpacity>
               )}
             </View>
+
+            {/* Show resend attempts remaining */}
+            {resendCount > 0 && resendCount < 3 && (
+              <Text style={[styles.resendInfoText, { color: C.textTertiary }]}>
+                {3 - resendCount} resend attempt(s) remaining
+              </Text>
+            )}
+
+            {resendCount >= 3 && (
+              <Text style={[styles.resendInfoText, { color: '#E74C3C' }]}>
+                Maximum resend limit reached. Please contact support.
+              </Text>
+            )}
 
             <PrimaryButton
               title={t.otp.verifyButton}
@@ -215,9 +334,9 @@ const VerifyOTP = ({ route, navigation }) => {
               style={styles.verifyButton}
             />
 
-            <Text style={[styles.helpText, { color: C.textSecondary }]}>
+            {/* <Text style={[styles.helpText, { color: C.textSecondary }]}>
               {t.otp.validity || 'OTP is valid for 5 minutes'}
-            </Text>
+            </Text> */}
           </ScrollView>
         </Animated.View>
         <TouchableOpacity
@@ -311,11 +430,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: hp('3%'),
+    marginBottom: hp('1%'),
     gap: wp('1%'),
   },
   resendText: { fontSize: wp('3.5%'), fontFamily: Fonts.light },
   resendButton: { fontSize: wp('3.5%'), fontFamily: Fonts.medium },
+  resendInfoText: {
+    fontSize: wp('3%'),
+    fontFamily: Fonts.light,
+    textAlign: 'center',
+    marginBottom: hp('2%'),
+  },
   verifyButton: { marginBottom: hp('2%') },
   helpText: {
     fontSize: wp('3%'),

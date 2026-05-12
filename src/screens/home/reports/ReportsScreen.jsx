@@ -1,4 +1,4 @@
-// src/screens/home/reports/ReportsScreen.jsx
+// src/screens/home/reports/ReportsScreen.jsx - COMPLETE WITH FILTERS
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   StatusBar,
   Platform,
+  Modal,
+  TextInput,
 } from 'react-native';
 import {
   widthPercentageToDP as wp,
@@ -28,12 +30,65 @@ import {
   ChevronUp,
   MapPin,
   ChevronLeft,
+  Filter,
+  X,
+  Calendar,
 } from 'lucide-react-native';
 import { useTheme } from '../../../context/ThemeContext';
 import { useLanguage } from '../../../context/LanguageContext';
 import { Fonts } from '../../../utils/GlobalText';
 import { getAttendanceHistory } from '../../../store/actions/attendanceActions';
-import { formatDuration } from '../../../utils/utils';
+import { formatMinutesToHours } from '../../../utils/utils';
+
+// ── Date Filter Helpers ───────────────────────────────────────
+const getDateRange = (filter, customDate = null) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const startOfWeek = new Date(today);
+  const day = today.getDay();
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  startOfWeek.setDate(today.getDate() - diffToMonday);
+
+  const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+  const startOfLastMonth = new Date(
+    today.getFullYear(),
+    today.getMonth() - 1,
+    1,
+  );
+  const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+
+  switch (filter) {
+    case 'TODAY':
+      return { start: today, end: today };
+    case 'THIS_WEEK':
+      return { start: startOfWeek, end: today };
+    case 'THIS_MONTH':
+      return { start: startOfMonth, end: today };
+    case 'LAST_MONTH':
+      return { start: startOfLastMonth, end: endOfLastMonth };
+    case 'CUSTOM':
+      return customDate || { start: today, end: today };
+    default:
+      return { start: null, end: null };
+  }
+};
+
+const isDateInRange = (dateStr, startDate, endDate) => {
+  if (!startDate || !endDate) return true;
+  const date = new Date(dateStr);
+  date.setHours(0, 0, 0, 0);
+  return date >= startDate && date <= endDate;
+};
+
+const formatDateForDisplay = date => {
+  if (!date) return '';
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+};
 
 // ── Helpers ───────────────────────────────────────
 const formatTime = ds => {
@@ -64,12 +119,99 @@ const formatFullDate = ds => {
 };
 
 const fmtDur = minutes => {
-  if (!minutes) return '0m';
+  if (!minutes && minutes !== 0) return '0m';
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
+};
+
+const formatMinutes = minutes => {
+  if (!minutes && minutes !== 0) return '---';
+  if (minutes >= 60) return formatMinutesToHours(minutes);
+  return `${minutes} min`;
+};
+
+// ── Get API Status Config (Original - UNCHANGED) ──
+const getApiStatusConfig = (status, C, t) => {
+  switch (status) {
+    case 'PRESENT':
+      return {
+        label: t.reports?.present || 'Present',
+        color: C.success,
+        icon: CheckCircle2,
+      };
+    case 'ABSENT':
+      return {
+        label: t.reports?.absent || 'Absent',
+        color: C.error,
+        icon: XCircle,
+      };
+    case 'HALF_DAY':
+      return {
+        label: t.reports?.halfDay || 'Half Day',
+        color: C.warning,
+        icon: AlertCircle,
+      };
+    case 'SHORT_LEAVE':
+      return {
+        label: t.reports?.shortLeave || 'Short Leave',
+        color: C.warning,
+        icon: AlertCircle,
+      };
+    default:
+      return {
+        label: status || 'Unknown',
+        color: C.textSecondary,
+        icon: AlertCircle,
+      };
+  }
+};
+
+// ── Get Extra Details (Late, Early, Short Leave) - EXTRA, NOT OVERRIDING ──
+const getExtraDetails = (record, C) => {
+  const details = [];
+
+  if (record.isLate === true && record.lateMinutes > 0) {
+    details.push({
+      type: 'late',
+      message: `⚠️ Late Login: ${formatMinutes(record.lateMinutes)} late`,
+      color: C.warning,
+    });
+  }
+
+  if (record.isEarlyLeave === true && record.earlyLeaveMinutes > 0) {
+    details.push({
+      type: 'early',
+      message: `⚠️ Early Logout: ${formatMinutes(
+        record.earlyLeaveMinutes,
+      )} early`,
+      color: C.warning,
+    });
+  }
+
+  if (record.morningShortLeave?.isShortLeave === true) {
+    details.push({
+      type: 'shortLeaveAM',
+      message: `⚠️ Morning Short Leave: ${formatMinutes(
+        record.morningShortLeave.minutes,
+      )}`,
+      color: C.info,
+    });
+  }
+
+  if (record.eveningShortLeave?.isShortLeave === true) {
+    details.push({
+      type: 'shortLeavePM',
+      message: `⚠️ Evening Short Leave: ${formatMinutes(
+        record.eveningShortLeave.minutes,
+      )}`,
+      color: C.info,
+    });
+  }
+
+  return details;
 };
 
 // ── Single Record Card ────────────────────────────
@@ -81,43 +223,21 @@ const RecordCard = ({ record }) => {
 
   const sessions = record.sessions || [];
 
-  const getStatusConfig = status => {
-    switch (status) {
-      case 'PRESENT':
-        return {
-          label: t.reports.present,
-          color: C.success,
-          icon: CheckCircle2,
-        };
-      case 'ABSENT':
-        return { label: t.reports.absent, color: C.error, icon: XCircle };
-      case 'HALF_DAY':
-        return {
-          label: t.reports.halfDay,
-          color: C.warning,
-          icon: AlertCircle,
-        };
-      // case 'LEAVE':
-      //   return { label: t.reports.leave, color: C.info, icon: CalendarDays };
-      default:
-        return {
-          label: status || t.reports.unknown || 'Unknown',
-          color: C.textSecondary,
-          icon: AlertCircle,
-        };
-    }
-  };
+  // ✅ ORIGINAL API STATUS - Jaise ka taise
+  const apiStatusConfig = getApiStatusConfig(record.attendanceStatus, C, t);
+  const ApiStatusIcon = apiStatusConfig.icon;
 
-  const statusCfg = getStatusConfig(record.attendanceStatus);
-  const StatusIcon = statusCfg.icon;
+  // ✅ EXTRA DETAILS - Alag se
+  const extraDetails = getExtraDetails(record, C);
 
   const totalMinutes = sessions.reduce(
-    (t, s) => t + (s.durationMinutes || 0),
+    (sum, s) => sum + (s.durationMinutes || 0),
     0,
   );
   const totalBreakMinutes = sessions.reduce(
-    (t, s) =>
-      t + (s.breaks || []).reduce((bt, b) => bt + (b.durationMinutes || 0), 0),
+    (sum, s) =>
+      sum +
+      (s.breaks || []).reduce((bt, b) => bt + (b.durationMinutes || 0), 0),
     0,
   );
 
@@ -128,22 +248,20 @@ const RecordCard = ({ record }) => {
     <View
       style={[
         cardStyles.wrapper,
-        {
-          backgroundColor: C.surface,
-          borderColor: C.border,
-        },
+        { backgroundColor: C.surface, borderColor: C.border },
       ]}
     >
-      {/* Row Header */}
       <TouchableOpacity
         style={cardStyles.cardHeader}
         onPress={() => setExpanded(v => !v)}
         activeOpacity={0.7}
       >
-        {/* Date + Status */}
         <View style={cardStyles.dateBlock}>
           <View
-            style={[cardStyles.statusDot, { backgroundColor: statusCfg.color }]}
+            style={[
+              cardStyles.statusDot,
+              { backgroundColor: apiStatusConfig.color },
+            ]}
           />
           <View>
             <Text style={[cardStyles.dateText, { color: C.textPrimary }]}>
@@ -152,18 +270,22 @@ const RecordCard = ({ record }) => {
             <View
               style={[
                 cardStyles.statusBadge,
-                { backgroundColor: statusCfg.color + '22' },
+                { backgroundColor: apiStatusConfig.color + '22' },
               ]}
             >
-              <StatusIcon size={wp('2.8%')} color={statusCfg.color} />
-              <Text style={[cardStyles.statusText, { color: statusCfg.color }]}>
-                {statusCfg.label}
+              <ApiStatusIcon size={wp('2.8%')} color={apiStatusConfig.color} />
+              <Text
+                style={[
+                  cardStyles.statusText,
+                  { color: apiStatusConfig.color },
+                ]}
+              >
+                {apiStatusConfig.label}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* Times + expand */}
         <View style={cardStyles.rightBlock}>
           <View style={cardStyles.timeRow}>
             <Text style={[cardStyles.timeIn, { color: C.success }]}>
@@ -200,30 +322,42 @@ const RecordCard = ({ record }) => {
         </View>
       </TouchableOpacity>
 
-      {/* Expanded Detail */}
       {expanded && (
         <View
           style={[
             cardStyles.detail,
-            {
-              borderTopColor: C.border,
-              backgroundColor: C.background,
-            },
+            { borderTopColor: C.border, backgroundColor: C.background },
           ]}
         >
-          {/* Stats strip */}
+          {/* 🔥 EXTRA DETAILS - Late Login, Early Logout, Short Leave */}
+          {extraDetails.length > 0 && (
+            <View
+              style={[
+                cardStyles.extraDetailsContainer,
+                {
+                  backgroundColor: C.warning + '08',
+                  borderColor: C.warning + '30',
+                },
+              ]}
+            >
+              {extraDetails.map((detail, idx) => (
+                <Text
+                  key={idx}
+                  style={[cardStyles.extraDetailText, { color: detail.color }]}
+                >
+                  {detail.message}
+                </Text>
+              ))}
+            </View>
+          )}
+
           <View
-            style={[
-              cardStyles.statsStrip,
-              {
-                borderBottomColor: C.border,
-              },
-            ]}
+            style={[cardStyles.statsStrip, { borderBottomColor: C.border }]}
           >
             <View style={cardStyles.stripItem}>
               <TrendingUp size={wp('3.5%')} color={C.primary} />
               <Text style={[cardStyles.stripLabel, { color: C.textSecondary }]}>
-                {t.reports.work}
+                {t.reports?.work || 'Work'}
               </Text>
               <Text style={[cardStyles.stripValue, { color: C.primary }]}>
                 {fmtDur(totalMinutes)}
@@ -235,7 +369,7 @@ const RecordCard = ({ record }) => {
             <View style={cardStyles.stripItem}>
               <Coffee size={wp('3.5%')} color={C.warning} />
               <Text style={[cardStyles.stripLabel, { color: C.textSecondary }]}>
-                {t.reports.break}
+                {t.reports?.break || 'Break'}
               </Text>
               <Text style={[cardStyles.stripValue, { color: C.warning }]}>
                 {fmtDur(totalBreakMinutes)}
@@ -247,7 +381,7 @@ const RecordCard = ({ record }) => {
             <View style={cardStyles.stripItem}>
               <Clock size={wp('3.5%')} color={C.info} />
               <Text style={[cardStyles.stripLabel, { color: C.textSecondary }]}>
-                {t.reports.sessions || 'Sessions'}
+                {t.reports?.sessions || 'Sessions'}
               </Text>
               <Text style={[cardStyles.stripValue, { color: C.info }]}>
                 {sessions.length}
@@ -255,29 +389,24 @@ const RecordCard = ({ record }) => {
             </View>
           </View>
 
-          {/* Sessions */}
           {sessions.map((session, si) => (
             <View
               key={si}
               style={[
                 cardStyles.sessionBlock,
-                {
-                  backgroundColor: C.surface,
-                  borderColor: C.border,
-                },
+                { backgroundColor: C.surface, borderColor: C.border },
               ]}
             >
               <Text style={[cardStyles.sessionTitle, { color: C.primary }]}>
-                {t.reports.session || 'Session'} {si + 1}
+                {t.reports?.session || 'Session'} {si + 1}
               </Text>
 
-              {/* Punch times */}
               <View style={cardStyles.punchRow}>
                 <View style={cardStyles.punchItem}>
                   <Text
                     style={[cardStyles.punchLabel, { color: C.textSecondary }]}
                   >
-                    {t.reports.in}
+                    {t.reports?.in || 'In'}
                   </Text>
                   <Text style={[cardStyles.punchTime, { color: C.success }]}>
                     {formatTime(session.punchIn)}
@@ -290,7 +419,7 @@ const RecordCard = ({ record }) => {
                   <Text
                     style={[cardStyles.punchLabel, { color: C.textSecondary }]}
                   >
-                    {t.reports.out}
+                    {t.reports?.out || 'Out'}
                   </Text>
                   <Text
                     style={[
@@ -300,7 +429,7 @@ const RecordCard = ({ record }) => {
                   >
                     {session.punchOut
                       ? formatTime(session.punchOut)
-                      : t.reports.ongoing}
+                      : t.reports?.ongoing || 'Ongoing'}
                   </Text>
                 </View>
                 <View
@@ -315,7 +444,6 @@ const RecordCard = ({ record }) => {
                 </View>
               </View>
 
-              {/* Breaks in session */}
               {session.breaks?.length > 0 && (
                 <View style={cardStyles.breaksBlock}>
                   {session.breaks.map((b, bi) => (
@@ -341,7 +469,7 @@ const RecordCard = ({ record }) => {
                         {formatTime(b.breakIn)}
                         {b.breakOut
                           ? ` → ${formatTime(b.breakOut)}`
-                          : ` → ${t.reports.ongoing}`}
+                          : ` → ${t.reports?.ongoing || 'Ongoing'}`}
                       </Text>
                       <View
                         style={[
@@ -366,7 +494,6 @@ const RecordCard = ({ record }) => {
                 </View>
               )}
 
-              {/* Location */}
               {session.punchInLocation?.address && (
                 <View
                   style={[cardStyles.locationRow, { borderTopColor: C.border }]}
@@ -460,6 +587,18 @@ const cardStyles = StyleSheet.create({
   },
   detail: {
     borderTopWidth: 1,
+  },
+  extraDetailsContainer: {
+    margin: wp('4%'),
+    marginBottom: 0,
+    padding: wp('3%'),
+    borderRadius: wp('2.5%'),
+    borderWidth: 1,
+    gap: 4,
+  },
+  extraDetailText: {
+    fontSize: wp('2.8%'),
+    fontFamily: Fonts.medium,
   },
   statsStrip: {
     flexDirection: 'row',
@@ -562,6 +701,94 @@ const cardStyles = StyleSheet.create({
   },
 });
 
+// ── Custom Date Range Modal ───────────────────────
+const CustomDateModal = ({ visible, onClose, onApply, theme }) => {
+  const C = theme.colors;
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const handleApply = () => {
+    if (startDate && endDate) {
+      onApply({ start: new Date(startDate), end: new Date(endDate) });
+    }
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <View style={[styles.modalOverlay, { backgroundColor: C.overlayBg }]}>
+        <View
+          style={[
+            styles.modalContent,
+            { backgroundColor: C.surface, borderColor: C.border },
+          ]}
+        >
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: C.textPrimary }]}>
+              Custom Date Range
+            </Text>
+            <TouchableOpacity onPress={onClose}>
+              <X size={wp('5%')} color={C.textSecondary} />
+            </TouchableOpacity>
+          </View>
+          <Text style={[styles.modalLabel, { color: C.textSecondary }]}>
+            Start Date (YYYY-MM-DD)
+          </Text>
+          <TextInput
+            style={[
+              styles.modalInput,
+              {
+                backgroundColor: C.background,
+                borderColor: C.border,
+                color: C.textPrimary,
+              },
+            ]}
+            placeholder="2024-01-01"
+            placeholderTextColor={C.textSecondary}
+            value={startDate}
+            onChangeText={setStartDate}
+          />
+          <Text
+            style={[
+              styles.modalLabel,
+              { color: C.textSecondary, marginTop: hp('2%') },
+            ]}
+          >
+            End Date (YYYY-MM-DD)
+          </Text>
+          <TextInput
+            style={[
+              styles.modalInput,
+              {
+                backgroundColor: C.background,
+                borderColor: C.border,
+                color: C.textPrimary,
+              },
+            ]}
+            placeholder="2024-01-31"
+            placeholderTextColor={C.textSecondary}
+            value={endDate}
+            onChangeText={setEndDate}
+          />
+          <TouchableOpacity
+            style={[styles.modalApplyBtn, { backgroundColor: C.primary }]}
+            onPress={handleApply}
+          >
+            <Text style={[styles.modalApplyText, { color: C.textDark }]}>
+              Apply
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
 // ── Main Reports Screen ───────────────────────────
 const ReportsScreen = ({ navigation }) => {
   const dispatch = useDispatch();
@@ -571,12 +798,14 @@ const ReportsScreen = ({ navigation }) => {
 
   const { history, historyLoading } = useSelector(state => state.attendance);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('ALL');
+  const [activeStatusFilter, setActiveStatusFilter] = useState('ALL');
+  const [dateFilter, setDateFilter] = useState('THIS_MONTH');
+  const [customDate, setCustomDate] = useState(null);
+  const [showDateFilterModal, setShowDateFilterModal] = useState(false);
+  const [showCustomDateModal, setShowCustomDateModal] = useState(false);
 
   useEffect(() => {
-    console.log('ReportsScreen mounted');
     dispatch(getAttendanceHistory());
-    return () => console.log('📊 ReportsScreen unmounted');
   }, []);
 
   const onRefresh = useCallback(async () => {
@@ -585,68 +814,85 @@ const ReportsScreen = ({ navigation }) => {
     setRefreshing(false);
   }, []);
 
-  // Sort history newest first
-  const sortedHistory = [...(history || [])].sort(
-    (a, b) => new Date(b.date) - new Date(a.date),
-  );
+  const applyDateFilter = (filter, custom = null) => {
+    setDateFilter(filter);
+    if (filter === 'CUSTOM' && custom) {
+      setCustomDate(custom);
+    }
+    setShowDateFilterModal(false);
+  };
 
-  // Filter
-  const filters = [
-    'ALL',
-    'PRESENT',
-    'ABSENT',
-    'HALF_DAY',
-    'SHORT_LEAVE',
-    // 'LEAVE',
-  ];
-  const filtered =
-    activeFilter === 'ALL'
-      ? sortedHistory
-      : sortedHistory.filter(r => {
-          if (activeFilter === 'SHORT_LEAVE') {
-            return r.attendanceStatus === 'SHORT_LEAVE';
-          }
-          if (activeFilter === 'HALF_DAY') {
-            return r.attendanceStatus === 'HALF_DAY';
-          }
-          if (activeFilter === 'ABSENT') {
-            return r.attendanceStatus === 'ABSENT';
-          }
-          if (activeFilter === 'PRESENT') {
-            return r.attendanceStatus === 'PRESENT';
-          }
-          // if (activeFilter === 'LEAVE') {
-          //   return r.attendanceStatus === 'LEAVE';
-          // }
-          return r.status === activeFilter;
-        });
+  // Apply both filters: Date + Status
+  const getFilteredHistory = () => {
+    if (!history || history.length === 0) return [];
 
-  // Summary stats from full history
+    const { start, end } = getDateRange(dateFilter, customDate);
+
+    let filtered = [...history];
+
+    // Apply date filter
+    if (start && end) {
+      filtered = filtered.filter(record =>
+        isDateInRange(record.date, start, end),
+      );
+    }
+
+    // Apply status filter
+    if (activeStatusFilter !== 'ALL') {
+      filtered = filtered.filter(
+        record => record.attendanceStatus === activeStatusFilter,
+      );
+    }
+
+    return filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+  };
+
+  const filteredHistory = getFilteredHistory();
+
+  // Stats from FILTERED history
   const stats = {
-    present: sortedHistory.filter(r => r.attendanceStatus === 'PRESENT').length,
-    absent: sortedHistory.filter(r => r.attendanceStatus === 'ABSENT').length,
-    halfDay: sortedHistory.filter(r => r.attendanceStatus === 'HALF_DAY')
+    present: filteredHistory.filter(r => r.attendanceStatus === 'PRESENT')
       .length,
-    shortLeave: sortedHistory.filter(r => r.attendanceStatus === 'SHORT_LEAVE')
+    absent: filteredHistory.filter(r => r.attendanceStatus === 'ABSENT').length,
+    halfDay: filteredHistory.filter(r => r.attendanceStatus === 'HALF_DAY')
       .length,
-    // leave: sortedHistory.filter(r => r.attendanceStatus === 'LEAVE').length,
-    totalWorked: sortedHistory.reduce(
-      (t, r) => t + (r.totalWorkingMinutes || 0),
+    shortLeave: filteredHistory.filter(
+      r => r.attendanceStatus === 'SHORT_LEAVE',
+    ).length,
+    totalWorked: filteredHistory.reduce(
+      (sum, r) => sum + (r.totalWorkingMinutes || 0),
       0,
     ),
-    totalBreak: sortedHistory.reduce(
-      (t, r) => t + (r.totalBreakMinutes || 0),
+    totalBreak: filteredHistory.reduce(
+      (sum, r) => sum + (r.totalBreakMinutes || 0),
       0,
     ),
   };
 
-  const filterLabels = {
-    ALL: t.reports.all,
-    PRESENT: t.reports.present,
-    ABSENT: t.reports.absent,
-    HALF_DAY: t.reports.halfDay,
-    LEAVE: t.reports.leave,
-    SHORT_LEAVE: t.reports.shortLeave,
+  const statusFilters = ['ALL', 'PRESENT', 'ABSENT', 'HALF_DAY', 'SHORT_LEAVE'];
+  const dateFilters = [
+    { id: 'TODAY', label: 'Today' },
+    { id: 'THIS_WEEK', label: 'This Week' },
+    { id: 'THIS_MONTH', label: 'This Month' },
+    { id: 'LAST_MONTH', label: 'Last Month' },
+    { id: 'CUSTOM', label: 'Custom' },
+  ];
+
+  const getDateFilterLabel = () => {
+    if (dateFilter === 'CUSTOM' && customDate) {
+      return `${formatDateForDisplay(
+        customDate.start,
+      )} - ${formatDateForDisplay(customDate.end)}`;
+    }
+    return dateFilters.find(f => f.id === dateFilter)?.label || 'This Month';
+  };
+
+  const statusLabels = {
+    ALL: t.reports?.all || 'All',
+    PRESENT: t.reports?.present || 'Present',
+    ABSENT: t.reports?.absent || 'Absent',
+    HALF_DAY: t.reports?.halfDay || 'Half Day',
+    SHORT_LEAVE: t.reports?.shortLeave || 'Short Leave',
   };
 
   return (
@@ -657,35 +903,51 @@ const ReportsScreen = ({ navigation }) => {
       <View
         style={[
           styles.header,
-          {
-            backgroundColor: C.background,
-            borderBottomColor: C.border,
-          },
+          { backgroundColor: C.background, borderBottomColor: C.border },
         ]}
       >
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={[
             styles.backBtn,
-            {
-              backgroundColor: C.surface,
-              borderColor: C.border,
-            },
+            { backgroundColor: C.surface, borderColor: C.border },
           ]}
         >
           <ChevronLeft size={wp('5%')} color={C.textPrimary} />
         </TouchableOpacity>
-
-        {/* Page Title */}
         <View style={styles.pageHeader}>
           <Text style={[styles.pageTitle, { color: C.textPrimary }]}>
-            {t.reports.title}
+            {t.reports?.title || 'Reports'}
           </Text>
           <Text style={[styles.pageSubtitle, { color: C.textSecondary }]}>
-            {sortedHistory.length} {t.reports.totalRecords}
+            {filteredHistory.length} {t.reports?.totalRecords || 'records'}
           </Text>
         </View>
+        <TouchableOpacity
+          onPress={() => setShowDateFilterModal(true)}
+          style={[
+            styles.filterBtn,
+            { backgroundColor: C.surface, borderColor: C.border },
+          ]}
+        >
+          <Filter size={wp('4%')} color={C.primary} />
+        </TouchableOpacity>
       </View>
+
+      {/* Date Filter Bar */}
+      <TouchableOpacity
+        style={[
+          styles.dateFilterBar,
+          { backgroundColor: C.surface, borderColor: C.border },
+        ]}
+        onPress={() => setShowDateFilterModal(true)}
+      >
+        <Calendar size={wp('4%')} color={C.primary} />
+        <Text style={[styles.dateFilterText, { color: C.textPrimary }]}>
+          {getDateFilterLabel()}
+        </Text>
+        <ChevronDown size={wp('3.5%')} color={C.textSecondary} />
+      </TouchableOpacity>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -699,15 +961,12 @@ const ReportsScreen = ({ navigation }) => {
           />
         }
       >
-        {/* ── Summary Cards ── */}
+        {/* Summary Cards */}
         <View style={styles.summaryGrid}>
           <View
             style={[
               styles.summaryCard,
-              {
-                backgroundColor: C.surface,
-                borderColor: C.success + '50',
-              },
+              { backgroundColor: C.surface, borderColor: C.success + '50' },
             ]}
           >
             <CheckCircle2 size={wp('5%')} color={C.success} />
@@ -715,16 +974,13 @@ const ReportsScreen = ({ navigation }) => {
               {stats.present}
             </Text>
             <Text style={[styles.summaryLbl, { color: C.textSecondary }]}>
-              {t.reports.present}
+              {t.reports?.present || 'Present'}
             </Text>
           </View>
           <View
             style={[
               styles.summaryCard,
-              {
-                backgroundColor: C.surface,
-                borderColor: C.error + '50',
-              },
+              { backgroundColor: C.surface, borderColor: C.error + '50' },
             ]}
           >
             <XCircle size={wp('5%')} color={C.error} />
@@ -732,16 +988,13 @@ const ReportsScreen = ({ navigation }) => {
               {stats.absent}
             </Text>
             <Text style={[styles.summaryLbl, { color: C.textSecondary }]}>
-              {t.reports.absent}
+              {t.reports?.absent || 'Absent'}
             </Text>
           </View>
           <View
             style={[
               styles.summaryCard,
-              {
-                backgroundColor: C.surface,
-                borderColor: C.warning + '50',
-              },
+              { backgroundColor: C.surface, borderColor: C.warning + '50' },
             ]}
           >
             <AlertCircle size={wp('5%')} color={C.warning} />
@@ -749,16 +1002,13 @@ const ReportsScreen = ({ navigation }) => {
               {stats.halfDay}
             </Text>
             <Text style={[styles.summaryLbl, { color: C.textSecondary }]}>
-              {t.reports.halfDay}
+              {t.reports?.halfDay || 'Half Day'}
             </Text>
           </View>
           <View
             style={[
               styles.summaryCard,
-              {
-                backgroundColor: C.surface,
-                borderColor: C.warning + '50',
-              },
+              { backgroundColor: C.surface, borderColor: C.warning + '50' },
             ]}
           >
             <Clock size={wp('5%')} color={C.warning} />
@@ -766,36 +1016,16 @@ const ReportsScreen = ({ navigation }) => {
               {stats.shortLeave}
             </Text>
             <Text style={[styles.summaryLbl, { color: C.textSecondary }]}>
-              {t.reports.shortLeave}
+              {t.reports?.shortLeave || 'Short Leave'}
             </Text>
           </View>
-          {/* <View
-            style={[
-              styles.summaryCard,
-              {
-                backgroundColor: C.surface,
-                borderColor: C.info + '50',
-              },
-            ]}
-          >
-            <CalendarDays size={wp('5%')} color={C.info} />
-            <Text style={[styles.summaryNum, { color: C.textPrimary }]}>
-              {stats.leave}
-            </Text>
-            <Text style={[styles.summaryLbl, { color: C.textSecondary }]}>
-              {t.reports.leave}
-            </Text>
-          </View> */}
         </View>
 
-        {/* ── Work Summary Strip ── */}
+        {/* Work Summary */}
         <View
           style={[
             styles.workStrip,
-            {
-              backgroundColor: C.surface,
-              borderColor: C.border,
-            },
+            { backgroundColor: C.surface, borderColor: C.border },
           ]}
         >
           <View style={styles.workItem}>
@@ -805,7 +1035,7 @@ const ReportsScreen = ({ navigation }) => {
                 {fmtDur(stats.totalWorked)}
               </Text>
               <Text style={[styles.workLbl, { color: C.textSecondary }]}>
-                {t.reports.totalWorked}
+                {t.reports?.totalWorked || 'Total Worked'}
               </Text>
             </View>
           </View>
@@ -817,66 +1047,69 @@ const ReportsScreen = ({ navigation }) => {
                 {fmtDur(stats.totalBreak)}
               </Text>
               <Text style={[styles.workLbl, { color: C.textSecondary }]}>
-                {t.reports.totalBreak}
+                {t.reports?.totalBreak || 'Total Break'}
               </Text>
             </View>
           </View>
         </View>
 
-        {/* ── Filter Pills ── */}
+        {/* Status Filter Pills */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.filterRow}
         >
-          {filters.map(f => (
+          {statusFilters.map(f => (
             <TouchableOpacity
               key={f}
               style={[
                 styles.filterPill,
                 {
-                  backgroundColor: activeFilter === f ? C.primary : C.surface,
-                  borderColor: activeFilter === f ? C.primary : C.border,
+                  backgroundColor:
+                    activeStatusFilter === f ? C.primary : C.surface,
+                  borderColor: activeStatusFilter === f ? C.primary : C.border,
                 },
               ]}
-              onPress={() => setActiveFilter(f)}
+              onPress={() => setActiveStatusFilter(f)}
             >
               <Text
                 style={[
                   styles.filterPillText,
-                  { color: activeFilter === f ? C.textDark : C.textSecondary },
-                  activeFilter === f && { fontFamily: Fonts.medium },
+                  {
+                    color:
+                      activeStatusFilter === f ? C.textDark : C.textSecondary,
+                  },
                 ]}
               >
-                {filterLabels[f]}
+                {statusLabels[f]}
               </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* ── Records List ── */}
+        {/* Records List */}
         {historyLoading && !refreshing ? (
           <View style={styles.loadingWrap}>
             <ActivityIndicator size="large" color={C.primary} />
             <Text style={[styles.loadingText, { color: C.textSecondary }]}>
-              {t.reports.loading}
+              {t.reports?.loading || 'Loading...'}
             </Text>
           </View>
-        ) : filtered.length === 0 ? (
+        ) : filteredHistory.length === 0 ? (
           <View style={styles.emptyWrap}>
             <CalendarDays size={wp('12%')} color={C.textSecondary} />
             <Text style={[styles.emptyTitle, { color: C.textPrimary }]}>
-              {t.reports.noRecords}
+              {t.reports?.noRecords || 'No records found'}
             </Text>
             <Text style={[styles.emptySubtitle, { color: C.textSecondary }]}>
-              {activeFilter === 'ALL'
-                ? t.reports.pullToRefresh
-                : `${t.reports.no} ${filterLabels[activeFilter]} ${t.reports.records}`}
+              {activeStatusFilter === 'ALL'
+                ? t.reports?.pullToRefresh || 'Pull to refresh'
+                : `No ${statusLabels[activeStatusFilter]} records for this period`}
             </Text>
           </View>
         ) : (
           <View style={styles.list}>
-            {filtered.map((record, i) => (
+            {filteredHistory.map((record, i) => (
               <RecordCard
                 key={record._id || record.date || i}
                 record={record}
@@ -884,19 +1117,84 @@ const ReportsScreen = ({ navigation }) => {
             ))}
           </View>
         )}
-
         <View style={{ height: hp('4%') }} />
       </ScrollView>
+
+      {/* Date Filter Modal */}
+      <Modal
+        visible={showDateFilterModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDateFilterModal(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: C.overlayBg }]}>
+          <View
+            style={[
+              styles.dateFilterModal,
+              { backgroundColor: C.surface, borderColor: C.border },
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: C.textPrimary }]}>
+                Select Date Range
+              </Text>
+              <TouchableOpacity onPress={() => setShowDateFilterModal(false)}>
+                <X size={wp('5%')} color={C.textSecondary} />
+              </TouchableOpacity>
+            </View>
+            {dateFilters.map(filter => (
+              <TouchableOpacity
+                key={filter.id}
+                style={[
+                  styles.dateFilterOption,
+                  { borderBottomColor: C.border },
+                  dateFilter === filter.id && {
+                    backgroundColor: C.primary + '20',
+                  },
+                ]}
+                onPress={() => {
+                  if (filter.id === 'CUSTOM') {
+                    setShowDateFilterModal(false);
+                    setShowCustomDateModal(true);
+                  } else {
+                    applyDateFilter(filter.id);
+                  }
+                }}
+              >
+                <Text
+                  style={[
+                    styles.dateFilterOptionText,
+                    {
+                      color:
+                        dateFilter === filter.id ? C.primary : C.textPrimary,
+                    },
+                  ]}
+                >
+                  {filter.label}
+                </Text>
+                {dateFilter === filter.id && filter.id !== 'CUSTOM' && (
+                  <CheckCircle2 size={wp('4%')} color={C.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Date Modal */}
+      <CustomDateModal
+        visible={showCustomDateModal}
+        onClose={() => setShowCustomDateModal(false)}
+        onApply={dateRange => applyDateFilter('CUSTOM', dateRange)}
+        theme={theme}
+      />
     </View>
   );
 };
 
-// ── Screen Styles ─────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: {
-    paddingBottom: hp('2%'),
-  },
+  scroll: { paddingBottom: hp('2%') },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -913,19 +1211,37 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  pageHeader: {
-    flex: 1,
-    paddingLeft: wp('3%'),
-  },
+  pageHeader: { flex: 1, paddingLeft: wp('3%') },
   pageTitle: {
     fontSize: wp('5%'),
     fontFamily: Fonts.bold,
     letterSpacing: -0.3,
   },
-  pageSubtitle: {
-    fontSize: wp('3%'),
-    fontFamily: Fonts.regular,
-    marginTop: 2,
+  pageSubtitle: { fontSize: wp('3%'), fontFamily: Fonts.regular, marginTop: 2 },
+  filterBtn: {
+    width: wp('9%'),
+    height: wp('9%'),
+    borderRadius: wp('2.5%'),
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateFilterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: wp('4%'),
+    marginTop: hp('1.5%'),
+    paddingHorizontal: wp('3%'),
+    paddingVertical: hp('1%'),
+    borderRadius: wp('3%'),
+    borderWidth: 1,
+  },
+  dateFilterText: {
+    flex: 1,
+    fontSize: wp('3.2%'),
+    fontFamily: Fonts.medium,
+    marginLeft: wp('2%'),
   },
   summaryGrid: {
     flexDirection: 'row',
@@ -941,10 +1257,7 @@ const styles = StyleSheet.create({
     gap: hp('0.5%'),
     borderWidth: 1,
   },
-  summaryNum: {
-    fontSize: wp('5%'),
-    fontFamily: Fonts.bold,
-  },
+  summaryNum: { fontSize: wp('5%'), fontFamily: Fonts.bold },
   summaryLbl: {
     fontSize: wp('2.2%'),
     fontFamily: Fonts.regular,
@@ -965,18 +1278,9 @@ const styles = StyleSheet.create({
     gap: wp('2.5%'),
     padding: wp('4%'),
   },
-  workValue: {
-    fontSize: wp('4%'),
-    fontFamily: Fonts.bold,
-  },
-  workLbl: {
-    fontSize: wp('2.6%'),
-    fontFamily: Fonts.regular,
-  },
-  stripDivider: {
-    width: 1,
-    marginVertical: wp('3%'),
-  },
+  workValue: { fontSize: wp('4%'), fontFamily: Fonts.bold },
+  workLbl: { fontSize: wp('2.6%'), fontFamily: Fonts.regular },
+  stripDivider: { width: 1, marginVertical: wp('3%') },
   filterRow: {
     paddingHorizontal: wp('5%'),
     paddingVertical: hp('1.5%'),
@@ -988,36 +1292,71 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
-  filterPillText: {
-    fontSize: wp('2.8%'),
-    fontFamily: Fonts.regular,
-  },
-  list: {
-    paddingHorizontal: wp('5%'),
-  },
-  loadingWrap: {
-    alignItems: 'center',
-    paddingTop: hp('8%'),
-    gap: hp('1.5%'),
-  },
-  loadingText: {
-    fontSize: wp('3.5%'),
-    fontFamily: Fonts.regular,
-  },
-  emptyWrap: {
-    alignItems: 'center',
-    paddingTop: hp('8%'),
-    gap: hp('1%'),
-  },
+  filterPillText: { fontSize: wp('2.8%'), fontFamily: Fonts.regular },
+  list: { paddingHorizontal: wp('5%') },
+  loadingWrap: { alignItems: 'center', paddingTop: hp('8%'), gap: hp('1.5%') },
+  loadingText: { fontSize: wp('3.5%'), fontFamily: Fonts.regular },
+  emptyWrap: { alignItems: 'center', paddingTop: hp('8%'), gap: hp('1%') },
   emptyTitle: {
     fontSize: wp('4.5%'),
     fontFamily: Fonts.bold,
     marginTop: hp('1%'),
   },
-  emptySubtitle: {
-    fontSize: wp('3.2%'),
+  emptySubtitle: { fontSize: wp('3.2%'), fontFamily: Fonts.regular },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateFilterModal: {
+    width: wp('80%'),
+    borderRadius: wp('4%'),
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  modalContent: {
+    width: wp('80%'),
+    borderRadius: wp('4%'),
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: wp('4%'),
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: wp('4%'),
+    borderBottomWidth: 1,
+    borderBottomColor: 'transparent',
+  },
+  modalTitle: { fontSize: wp('4%'), fontFamily: Fonts.bold },
+  dateFilterOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: wp('4%'),
+    borderBottomWidth: 1,
+  },
+  dateFilterOptionText: { fontSize: wp('3.5%'), fontFamily: Fonts.regular },
+  modalLabel: {
+    fontSize: wp('3%'),
+    fontFamily: Fonts.regular,
+    marginBottom: hp('0.5%'),
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: wp('2%'),
+    padding: wp('3%'),
+    fontSize: wp('3.5%'),
     fontFamily: Fonts.regular,
   },
+  modalApplyBtn: {
+    marginTop: hp('2%'),
+    padding: wp('3%'),
+    borderRadius: wp('2%'),
+    alignItems: 'center',
+  },
+  modalApplyText: { fontSize: wp('3.5%'), fontFamily: Fonts.medium },
 });
 
 export default ReportsScreen;

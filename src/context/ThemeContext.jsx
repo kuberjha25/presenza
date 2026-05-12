@@ -44,7 +44,7 @@ export const DarkTheme = {
 
     // ── Backgrounds ──────────────────────────────────────
     background: '#0A1128',
-    surface: 'rgba(38, 50, 86, 0.66)',
+    surface: 'rgb(38, 50, 86)',
     surfaceSolid: '#1C2541',
     surfaceRaised: '#243058', // slightly elevated surface
     cardBg: 'rgba(38, 50, 86, 0.66)',

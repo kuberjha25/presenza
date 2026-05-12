@@ -17,8 +17,8 @@ android {
         applicationId "com.presenza"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 20
-        versionName "1.1.6"
+        versionCode 21
+        versionName "1.1.7"
     }
 
     signingConfigs {
@@ -68,6 +68,7 @@ android {
 
 dependencies {
     implementation("com.facebook.react:react-android")
+    implementation project(':react-native-fs')
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

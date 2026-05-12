@@ -451,8 +451,8 @@ const HomeScreen = ({ navigation }) => {
     }
 
     if (label === t.home.reimbursement) {
-      // navigation.navigate('Reimbursement');
-      // return;
+      navigation.navigate('Reimbursement');
+      return;
     }
 
     if (label === t.home.salarySlip) {
@@ -1085,7 +1085,7 @@ const HomeScreen = ({ navigation }) => {
               </View>
 
               {/* Short Leave */}
-              {renderShortLeaveInfo()}
+              {/* {renderShortLeaveInfo()} */}
 
               {/* Late / Short Leave / Early Leave / Half Day - Show based on API values */}
               {(isUserLate || isEarlyLeave || isHalfDay || isShortLeave) && (

@@ -15,7 +15,7 @@ export const saveTokens = async (accessToken, refreshToken, user) => {
     await EncryptedStorage.setItem('user_data', JSON.stringify(user));
     await AsyncStorage.setItem('user', JSON.stringify(user));
 
-    console.log('✅ Tokens saved');
+    console.log('✅ Tokens saved',accessToken);
     return true;
   } catch (error) {
     console.log('❌ Error saving tokens:', error);
@@ -59,7 +59,7 @@ export const debugStorage = async () => {
     const refreshToken = await AsyncStorage.getItem(REFRESH_SERVICE_ID);
     const user = await AsyncStorage.getItem('user');
 
-    console.log('Access token exists:', !!accessToken);
+    console.log('Access token exists:', accessToken);
     console.log('Refresh token exists:', !!refreshToken);
     console.log('User exists:', !!user);
 

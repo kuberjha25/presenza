@@ -11,11 +11,18 @@ import {
   Alert,
   Platform,
   Image,
-  DatePickerAndroid,
-  DatePickerIOS,
+  Linking,
+  ActivityIndicator,
 } from 'react-native';
-
-import React, { useCallback, useState } from 'react';
+import FileViewer from 'react-native-file-viewer';
+import RNFS from 'react-native-fs';
+import React, {
+  useCallback,
+  useState,
+  useEffect,
+  useRef,
+  useLayoutEffect,
+} from 'react';
 import { useTheme } from '../../../context/ThemeContext';
 import { useLanguage } from '../../../context/LanguageContext';
 import {
@@ -40,31 +47,31 @@ import {
   Wallet,
   Trash2,
   Receipt,
-  AlertCircle,
   FilePlus,
-  Camera,
-  RefreshCw,
-  ImageIcon,
   Loader,
   Eye,
 } from 'lucide-react-native';
-import { useToast } from 'react-native-toast-notifications';
 import { useDispatch, useSelector } from 'react-redux';
-import { createExpense } from '../../../store/actions/expenseActions';
-import { showToast } from '../../../components/common/ToastProvider';
+import {
+  createExpense,
+  fetchExpenses,
+} from '../../../store/actions/expenseActions';
 
 const Reimbursement = ({ navigation }) => {
   const { theme } = useTheme();
   const { t } = useLanguage();
   const C = theme.colors;
   const dispatch = useDispatch();
-  const toast = useToast();
 
   const [refreshing, setRefreshing] = useState(false);
-  const [activeFilter, setActiveFilter] = useState('new');
+  const [activeFilter, setActiveFilter] = useState('pending');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [initialLoadingDone, setInitialLoadingDone] = useState(false);
+  const [openingFile, setOpeningFile] = useState(false);
+
+  const { expenses, loading } = useSelector(state => state.expense);
 
   // Form state
   const [expenseType, setExpenseType] = useState('car');
@@ -87,125 +94,64 @@ const Reimbursement = ({ navigation }) => {
   const [tempYear, setTempYear] = useState(new Date().getFullYear());
   const [dateDisplay, setDateDisplay] = useState('');
 
-  // File state - sirf selected files store karte hain
   const [selectedFiles, setSelectedFiles] = useState([]);
 
-  // Dummy data
-  const [reimbursements, setReimbursements] = useState([
-    {
-      id: 1,
-      type: 'flight',
-      title: 'Flight Ticket - Client Meeting',
-      amount: 1420,
-      date: '2026-03-15',
-      fromLocation: 'New York',
-      toLocation: 'San Francisco',
-      purpose: 'Client Meeting for project discussion',
-      status: 'approved',
-      submittedDate: '2026-03-16',
-      approvedBy: 'Lisa Brown',
-      approvedDate: '2026-03-17',
-      paymentMethod: 'company-paid',
-      travelCost: 1420,
-      hotelCost: 0,
-      foodCost: 0,
-      attachments: [],
-    },
-    {
-      id: 2,
-      type: 'car',
-      title: 'Car Travel - Business Visit',
-      amount: 180,
-      date: '2026-03-18',
-      fromLocation: 'Office',
-      toLocation: 'Client Site',
-      purpose: 'Business visit to client location',
-      status: 'pending',
-      submittedDate: '2026-03-18',
-      paymentMethod: 'self-paid',
-      travelCost: 120,
-      hotelCost: 0,
-      foodCost: 60,
-      kilometers: 12,
-      attachments: [],
-    },
-    {
-      id: 3,
-      type: 'train',
-      title: 'Train Travel - Conference',
-      amount: 315,
-      date: '2026-03-10',
-      fromLocation: 'Boston',
-      toLocation: 'Providence',
-      purpose: 'Conference Attendance',
-      status: 'approved',
-      submittedDate: '2026-03-11',
-      approvedBy: 'Lisa Brown',
-      approvedDate: '2026-03-12',
-      paymentMethod: 'company-paid',
-      travelCost: 65,
-      hotelCost: 200,
-      foodCost: 50,
-      attachments: [],
-    },
-    {
-      id: 4,
-      type: 'other',
-      title: 'Conference Registration & Accommodation',
-      amount: 580,
-      date: '2026-03-12',
-      fromLocation: 'Home Office',
-      toLocation: 'Tech Summit, Austin',
-      purpose: 'Attended 3-day technology conference with networking dinner',
-      status: 'approved',
-      submittedDate: '2026-03-14',
-      approvedBy: 'Lisa Brown',
-      approvedDate: '2026-03-15',
-      paymentMethod: 'company-paid',
-      travelCost: 250,
-      hotelCost: 250,
-      foodCost: 80,
-      attachments: [],
-      otherExpenses: [
-        {
-          id: '1',
-          description: 'Conference Registration',
-          amount: 100,
-          paymentMethod: 'company-paid',
-        },
-        {
-          id: '2',
-          description: 'Networking Dinner',
-          amount: 50,
-          paymentMethod: 'self-paid',
-        },
-      ],
-    },
-    {
-      id: 5,
-      type: 'flight',
-      title: 'Flight - Business Trip',
-      amount: 850,
-      date: '2026-03-20',
-      fromLocation: 'Chicago',
-      toLocation: 'Los Angeles',
-      purpose: 'Client presentation',
-      status: 'pending',
-      submittedDate: '2026-03-20',
-      paymentMethod: 'self-paid',
-      travelCost: 850,
-      hotelCost: 0,
-      foodCost: 0,
-      attachments: [],
-    },
-  ]);
+  // ============ CONSTANTS ============
+  const AMOUNT_MAX_LENGTH = 10;
+  const AMOUNT_MAX_VALUE = 100000;
+  const KM_MAX_VALUE = 1000;
+  const MAX_FILE_SIZE_MB = 5;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+  const LOCATION_MAX_LENGTH = 30;
+  const PURPOSE_MAX_LENGTH = 30;
+  const DESCRIPTION_MAX_LENGTH = 30;
 
-  // const { profile } = useSelector(state => state.employeeProfile);
+  useEffect(() => {
+    loadExpenses();
+  }, []);
 
-  // ============ ADD THESE HELPER FUNCTIONS ============
+  const loadExpenses = async () => {
+    const result = await dispatch(fetchExpenses());
+    setInitialLoadingDone(true);
+  };
+
+  // ============ VALIDATION FUNCTIONS ============
+  const validateAmount = value => {
+    if (!value) return '';
+    const numValue = value.replace(/[^0-9]/g, '');
+    if (numValue === '') return '';
+    const num = parseInt(numValue, 10);
+    if (num > AMOUNT_MAX_VALUE) return AMOUNT_MAX_VALUE.toString();
+    return numValue.slice(0, AMOUNT_MAX_LENGTH);
+  };
+
+  const validateKilometers = value => {
+    if (!value) return '';
+    const numValue = value.replace(/[^0-9]/g, '');
+    if (numValue === '') return '';
+    const num = parseInt(numValue, 10);
+    if (num > KM_MAX_VALUE) return KM_MAX_VALUE.toString();
+    return numValue.slice(0, 6);
+  };
+
+  const validateLocation = value => {
+    if (!value) return '';
+    return value.slice(0, LOCATION_MAX_LENGTH);
+  };
+
+  const validatePurpose = value => {
+    if (!value) return '';
+    return value.slice(0, PURPOSE_MAX_LENGTH);
+  };
+
+  const validateDescription = value => {
+    if (!value) return '';
+    return value.slice(0, DESCRIPTION_MAX_LENGTH);
+  };
+
+  // ============ HELPER FUNCTIONS ============
   const formatDDMMYYYY = dateStr => {
     if (!dateStr) return '';
-    // Handle YYYY-MM-DD to DD/MM/YYYY
     if (dateStr.includes('-')) {
       const [year, month, day] = dateStr.split('-');
       return `${day}/${month}/${year}`;
@@ -224,7 +170,6 @@ const Reimbursement = ({ navigation }) => {
   };
 
   const openDatePicker = () => {
-    // Initialize temp values from current date
     if (date) {
       const [year, month, day] = date.split('-');
       setTempYear(parseInt(year));
@@ -248,8 +193,9 @@ const Reimbursement = ({ navigation }) => {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+    await dispatch(fetchExpenses());
+    setRefreshing(false);
+  }, [dispatch]);
 
   const formatDate = dateString => {
     if (!dateString) return '—';
@@ -271,26 +217,36 @@ const Reimbursement = ({ navigation }) => {
     }).format(amount);
   };
 
+  const getTravelTypeLabel = type => {
+    if (!type) return 'Other';
+    const typeStr = type.toLowerCase();
+    if (typeStr.includes('car')) return 'Car';
+    if (typeStr.includes('train')) return 'Train';
+    if (typeStr.includes('flight') || typeStr.includes('plane'))
+      return 'Flight';
+    return 'Other';
+  };
+
   const getExpenseIcon = type => {
-    switch (type) {
-      case 'car':
-        return <Car size={wp('4%')} color="#FF6B35" />;
-      case 'train':
-        return <Train size={wp('4%')} color="#4A90E2" />;
-      case 'flight':
-        return <Plane size={wp('4%')} color="#9B59B6" />;
-      default:
-        return <FileText size={wp('4%')} color="#1ABC9C" />;
+    const typeStr = (type || '').toLowerCase();
+    if (typeStr.includes('car')) {
+      return <Car size={wp('4%')} color="#FF6B35" />;
+    } else if (typeStr.includes('train')) {
+      return <Train size={wp('4%')} color="#4A90E2" />;
+    } else if (typeStr.includes('flight') || typeStr.includes('plane')) {
+      return <Plane size={wp('4%')} color="#9B59B6" />;
     }
+    return <FileText size={wp('4%')} color="#1ABC9C" />;
   };
 
   const getStatusColor = status => {
-    switch (status) {
-      case 'approved':
+    const statusStr = (status || '').toUpperCase();
+    switch (statusStr) {
+      case 'APPROVED':
         return { bg: '#2ECC71', color: '#fff' };
-      case 'pending':
+      case 'PENDING':
         return { bg: '#F39C12', color: '#fff' };
-      case 'rejected':
+      case 'REJECTED':
         return { bg: '#E74C3C', color: '#fff' };
       default:
         return { bg: '#95A5A6', color: '#fff' };
@@ -298,50 +254,40 @@ const Reimbursement = ({ navigation }) => {
   };
 
   const getStatusIcon = status => {
-    switch (status) {
-      case 'approved':
+    const statusStr = (status || '').toUpperCase();
+    switch (statusStr) {
+      case 'APPROVED':
         return <CheckCircle size={wp('3%')} color="#fff" />;
-      case 'pending':
+      case 'PENDING':
         return <Clock size={wp('3%')} color="#fff" />;
-      case 'rejected':
+      case 'REJECTED':
         return <XCircle size={wp('3%')} color="#fff" />;
       default:
         return null;
     }
   };
 
-  // ============ DELETE REQUEST FUNCTION ============
-  const handleDeleteRequest = item => {
-    Alert.alert(
-      'Delete Request',
-      `Are you sure you want to delete "${item.title}"? This action cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setReimbursements(prev => prev.filter(r => r.id !== item.id));
-            showToast('Request deleted successfully', 'success');
-
-            // Close view modal if it's open for this item
-            if (selectedRequest?.id === item.id) {
-              setShowViewModal(false);
-              setSelectedRequest(null);
-            }
-          },
-        },
-      ],
-    );
-  };
-
-  // ============ VIEW REQUEST DETAILS ============
   const handleViewRequest = item => {
     setSelectedRequest(item);
     setShowViewModal(true);
   };
 
   const addOtherExpense = () => {
+    const hasIncompleteExpense = otherExpenses.some(
+      item =>
+        !item.description.trim() ||
+        !item.amount ||
+        parseFloat(item.amount) <= 0,
+    );
+
+    if (hasIncompleteExpense) {
+      Alert.alert(
+        'Validation Error',
+        'Please complete existing other expense first',
+      );
+      return;
+    }
+
     setOtherExpenses([
       ...otherExpenses,
       {
@@ -357,10 +303,28 @@ const Reimbursement = ({ navigation }) => {
     setOtherExpenses(otherExpenses.filter(item => item.id !== id));
   };
 
+  const truncateText = (text, maxLength = 30) => {
+    if (!text) return 'N/A';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
+
   const updateOtherExpense = (id, field, value) => {
-    setOtherExpenses(
-      otherExpenses.map(item =>
-        item.id === id ? { ...item, [field]: value } : item,
+    let updatedValue = value || '';
+
+    if (field === 'amount') {
+      updatedValue = validateAmount(updatedValue);
+    }
+
+    if (field === 'description') {
+      updatedValue = updatedValue.replace(/\n/g, ' ').trimStart();
+
+      updatedValue = validateDescription(updatedValue);
+    }
+
+    setOtherExpenses(prev =>
+      prev.map(item =>
+        item.id === id ? { ...item, [field]: updatedValue } : item,
       ),
     );
   };
@@ -376,20 +340,28 @@ const Reimbursement = ({ navigation }) => {
     return travel + hotel + food + otherTotal;
   };
 
-  // ============ FILE PICKING FUNCTIONS (No upload, just select) ============
+  // ============ FILE PICKING FUNCTIONS ============
+  const validateFileSize = fileSize => {
+    if (fileSize && fileSize > MAX_FILE_SIZE_BYTES) {
+      Alert.alert(
+        'File Too Large',
+        `${MAX_FILE_SIZE_MB}MB maximum file size allowed.`,
+      );
+      return false;
+    }
+    return true;
+  };
 
   const handleImagePick = () => {
-    const remainingSlots = 5 - selectedFiles.length;
-    if (remainingSlots <= 0) {
-      // Alert.alert('Limit Reached', 'Maximum 5 files allowed');
-      showToast('You have already selected 5 files', 'warning');
+    if (selectedFiles.length >= 1) {
+      Alert.alert('Limit Reached', 'You can only upload 1 file');
       return;
     }
 
     launchImageLibrary(
       {
         mediaType: 'photo',
-        selectionLimit: remainingSlots,
+        selectionLimit: 1,
         quality: 0.8,
         maxHeight: 2000,
         maxWidth: 2000,
@@ -398,126 +370,72 @@ const Reimbursement = ({ navigation }) => {
         if (response.didCancel) {
           console.log('User cancelled image picker');
         } else if (response.error) {
-          console.log('ImagePicker Error:', response.error);
+          Alert.alert('Error', 'Failed to pick image: ' + response.error);
         } else if (response.assets && response.assets.length > 0) {
-          const imageFiles = response.assets.map(asset => ({
+          const asset = response.assets[0];
+
+          if (!validateFileSize(asset.fileSize)) {
+            return;
+          }
+
+          const imageFile = {
             id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
             uri: asset.uri,
             type: asset.type?.includes('png') ? 'png' : 'jpg',
-            name:
-              asset.fileName ||
-              `image_${Date.now()}.${
-                asset.type?.includes('png') ? 'png' : 'jpg'
-              }`,
+            name: asset.fileName || `image_${Date.now()}.jpg`,
             size: asset.fileSize,
             mimeType: asset.type || 'image/jpeg',
-          }));
+          };
 
-          setSelectedFiles(prev => [...prev, ...imageFiles]);
-
-          showToast(`${imageFiles.length} image(s) selected`, 'success');
+          setSelectedFiles(prev => [...prev, imageFile]);
+          Alert.alert('Success', 'Image selected');
         }
       },
     );
   };
 
   const handlePDFPick = async () => {
-    const remainingSlots = 5 - selectedFiles.length;
-    if (remainingSlots <= 0) {
-      // Alert.alert('Limit Reached', 'Maximum 5 files allowed');
-      showToast('You have already selected 5 files', 'warning');
+    if (selectedFiles.length >= 1) {
+      Alert.alert('Limit Reached', 'You can only upload 1 file');
       return;
     }
 
     try {
       const result = await pick({
         type: ['application/pdf'],
-        allowMultiSelection: true,
+        allowMultiSelection: false,
         mode: 'import',
       });
 
       if (result && result.length > 0) {
-        const filesToAdd = result.slice(0, remainingSlots);
-        const pdfFiles = filesToAdd.map(file => ({
+        const file = result[0];
+
+        if (!validateFileSize(file.size)) {
+          return;
+        }
+
+        const pdfFile = {
           id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           uri: file.uri,
           type: 'pdf',
           name: file.name || `document_${Date.now()}.pdf`,
           size: file.size,
           mimeType: 'application/pdf',
-        }));
+        };
 
-        setSelectedFiles(prev => [...prev, ...pdfFiles]);
-        showToast(`${pdfFiles.length} PDF(s) selected`, 'success');
-
-        if (result.length > remainingSlots) {
-          Alert.alert(
-            'Note',
-            `Only ${remainingSlots} file(s) added. Maximum 5 files allowed.`,
-          );
-        }
+        setSelectedFiles(prev => [...prev, pdfFile]);
+        Alert.alert('Success', 'PDF selected');
       }
     } catch (error) {
       if (error.code !== 'DOCUMENT_PICKER_CANCELED') {
-        console.log('PDF picker error:', error);
-      }
-    }
-  };
-
-  const handleAllFilesPick = async () => {
-    const remainingSlots = 5 - selectedFiles.length;
-    if (remainingSlots <= 0) {
-      // Alert.alert('Limit Reached', 'Maximum 5 files allowed');
-      showToast('You have already selected 5 files', 'warning');
-      return;
-    }
-
-    try {
-      const result = await pick({
-        type: ['image/*', 'application/pdf'],
-        allowMultiSelection: true,
-        mode: 'import',
-      });
-
-
-      if (result && result.length > 0) {
-        const filesToAdd = result.slice(0, remainingSlots);
-        const files = filesToAdd.map(file => {
-          let fileType = 'pdf';
-          if (file.type?.includes('image')) {
-            fileType = file.type.includes('png') ? 'png' : 'jpg';
-          }
-          return {
-            id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            uri: file.uri,
-            type: fileType,
-            name: file.name || `file_${Date.now()}.${fileType}`,
-            size: file.size,
-            mimeType: file.type || 'application/octet-stream',
-          };
-        });
-
-        setSelectedFiles(prev => [...prev, ...files]);
-        showToast(`${files.length} file(s) selected`, 'success');
-
-        if (result.length > remainingSlots) {
-          Alert.alert(
-            'Note',
-            `Only ${remainingSlots} file(s) added. Maximum 5 files allowed.`,
-          );
-        }
-      }
-    } catch (error) {
-      if (error.code !== 'DOCUMENT_PICKER_CANCELED') {
-        console.log('File picker error:', error);
+        Alert.alert('Error', 'Failed to pick PDF: ' + error.message);
       }
     }
   };
 
   const handleCameraCapture = () => {
-    if (selectedFiles.length >= 5) {
-      // Alert.alert('Limit Reached', 'Maximum 5 files allowed');
-      showToast('You have already selected 5 files', 'warning');
+    if (selectedFiles.length >= 1) {
+      Alert.alert('Limit Reached', 'You can only upload 1 file');
       return;
     }
 
@@ -533,41 +451,50 @@ const Reimbursement = ({ navigation }) => {
         if (response.didCancel) {
           console.log('User cancelled camera');
         } else if (response.error) {
-          console.log('Camera Error:', response.error);
-          // Alert.alert('Error', 'Failed to capture image');
-          showToast('Failed to capture image', 'danger');
+          Alert.alert(
+            'Camera Error',
+            'Failed to capture image: ' + response.error,
+          );
         } else if (response.assets && response.assets.length > 0) {
+          const asset = response.assets[0];
+
+          if (!validateFileSize(asset.fileSize)) {
+            return;
+          }
+
           const imageFile = {
             id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            uri: response.assets[0].uri,
+            uri: asset.uri,
             type: 'jpg',
-            name: response.assets[0].fileName || `capture_${Date.now()}.jpg`,
-            size: response.assets[0].fileSize,
+            name: asset.fileName || `capture_${Date.now()}.jpg`,
+            size: asset.fileSize,
             mimeType: 'image/jpeg',
           };
 
           setSelectedFiles(prev => [...prev, imageFile]);
-          showToast('Photo captured', 'success');
+          Alert.alert('Success', 'Photo captured');
         }
       },
     );
   };
 
   const showFilePickerOptions = () => {
-    if (selectedFiles.length >= 5) {
+    if (selectedFiles.length >= 1) {
       Alert.alert(
         'Limit Reached',
-        'Maximum 5 files allowed. Remove some files to add new ones.',
+        'You can only upload 1 file. Please remove the existing file to add a new one.',
       );
       return;
     }
 
     Alert.alert(
       'Upload Attachment',
-      'Choose file type to add',
+      `Choose file type to add (Max ${MAX_FILE_SIZE_MB}MB)`,
       [
         { text: 'PDF Document', onPress: handlePDFPick },
         { text: 'Image', onPress: handleImagePick },
+        { text: 'Take Photo', onPress: handleCameraCapture },
+        { text: 'Cancel', onPress: () => {}, style: 'cancel' },
       ],
       { cancelable: true },
     );
@@ -584,86 +511,114 @@ const Reimbursement = ({ navigation }) => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const getFileIcon = (type, size = wp('6%')) => {
-    if (type === 'pdf') return <FileText size={size} color="#E74C3C" />;
-    return <ImageIcon size={size} color="#3498DB" />;
+  const handleOpenReceipt = async receiptUrl => {
+    if (!receiptUrl) {
+      Alert.alert('Error', 'No receipt available');
+      return;
+    }
+
+    try {
+      setOpeningFile(true);
+
+      const fileName = receiptUrl.split('/').pop();
+      const extension = fileName.split('.').pop()?.toLowerCase();
+
+      const localPath = `${RNFS.DocumentDirectoryPath}/${fileName}`;
+
+      const downloadResult = await RNFS.downloadFile({
+        fromUrl: receiptUrl,
+        toFile: localPath,
+      }).promise;
+
+      if (downloadResult.statusCode !== 200) {
+        Alert.alert('Error', 'Failed to download file');
+        return;
+      }
+
+      let mimeType = '*/*';
+
+      if (extension === 'pdf') {
+        mimeType = 'application/pdf';
+      } else if (['jpg', 'jpeg'].includes(extension)) {
+        mimeType = 'image/jpeg';
+      } else if (extension === 'png') {
+        mimeType = 'image/png';
+      }
+
+      await FileViewer.open(localPath, {
+        showOpenWithDialog: true,
+        mimeType,
+      });
+    } catch (error) {
+      console.log('FILE OPEN ERROR =>', error);
+      Alert.alert('Error', 'No application found to open this file type');
+    } finally {
+      setOpeningFile(false);
+    }
   };
 
-  // ============ SUBMIT (Single API Call with File) ============
-
+  // ============ SUBMIT EXPENSE ============
   const handleSubmitExpense = () => {
-    if (!amount || !date || !fromLocation || !toLocation || !purpose) {
-      // Alert.alert('Error', 'Please fill all required fields');
-      showToast('Please fill all required fields', 'danger');
+    if (!amount || parseFloat(amount) <= 0) {
+      Alert.alert('Validation Error', 'Please enter a valid travel amount');
       return;
+    }
+    if (!date) {
+      Alert.alert('Validation Error', 'Please select a date');
+      return;
+    }
+    if (!fromLocation.trim()) {
+      Alert.alert('Validation Error', 'Please enter "From Location"');
+      return;
+    }
+    if (!toLocation.trim()) {
+      Alert.alert('Validation Error', 'Please enter "To Location"');
+      return;
+    }
+    if (!purpose.trim()) {
+      Alert.alert('Validation Error', 'Please enter Business Purpose');
+      return;
+    }
+    if (expenseType === 'car' && (!kilometers || parseFloat(kilometers) <= 0)) {
+      Alert.alert(
+        'Validation Error',
+        'Please enter valid distance for car travel',
+      );
+      return;
+    }
+    // Attachment validation
+    if (selectedFiles.length === 0) {
+      Alert.alert(
+        'Validation Error',
+        'Please upload receipt/document attachment',
+      );
+      return;
+    }
+
+    // Other expenses validation
+    for (const item of otherExpenses) {
+      if (item.description.trim() && !item.amount) {
+        Alert.alert(
+          'Validation Error',
+          'Please enter amount for other expense',
+        );
+        return;
+      }
+
+      if (!item.description.trim() && item.amount) {
+        Alert.alert(
+          'Validation Error',
+          'Please enter description for other expense',
+        );
+        return;
+      }
     }
 
     submitToServer();
   };
 
-  // const getPolicyByDesignation = designation => {
-  //   const d = (designation || '').toLowerCase();
-
-  //   // 🔹 DEFAULT (fallback)
-  //   const defaultPolicy = {
-  //     grade: 'Grade 2 - Senior Employee',
-  //     policySnapshot: {
-  //       trainClass: '2nd AC / 3rd AC',
-  //       flightClass: 'Economy',
-  //       hotelLimit: 2000,
-  //       carRatePerKm: 10,
-  //     },
-  //   };
-
-  //   if (!d) return defaultPolicy;
-
-  //   // 🔹 MANAGER / SENIOR
-  //   if (d.includes('manager') || d.includes('lead')) {
-  //     return {
-  //       grade: 'Grade 1 - Manager',
-  //       policySnapshot: {
-  //         trainClass: '1st AC / 2nd AC',
-  //         flightClass: 'Business',
-  //         hotelLimit: 4000,
-  //         carRatePerKm: 15,
-  //       },
-  //     };
-  //   }
-
-  //   // 🔹 MID LEVEL
-  //   if (d.includes('senior') || d.includes('engineer')) {
-  //     return {
-  //       grade: 'Grade 2 - Senior Employee',
-  //       policySnapshot: {
-  //         trainClass: '2nd AC / 3rd AC',
-  //         flightClass: 'Economy',
-  //         hotelLimit: 2500,
-  //         carRatePerKm: 12,
-  //       },
-  //     };
-  //   }
-
-  //   // 🔹 JUNIOR
-  //   if (d.includes('intern') || d.includes('trainee') || d.includes('junior')) {
-  //     return {
-  //       grade: 'Grade 3 - Junior',
-  //       policySnapshot: {
-  //         trainClass: 'Sleeper / 3rd AC',
-  //         flightClass: 'Economy',
-  //         hotelLimit: 1500,
-  //         carRatePerKm: 8,
-  //       },
-  //     };
-  //   }
-
-  //   // 🔹 fallback
-  //   return defaultPolicy;
-  // };
-
   const submitToServer = async () => {
     setSubmitting(true);
-    // const designation = profile?.[0]?.designation;
-    // const { grade, policySnapshot } = getPolicyByDesignation(designation);
 
     let grade = 'Grade 2 - Senior Employee';
     let policySnapshot = {
@@ -678,10 +633,10 @@ const Reimbursement = ({ navigation }) => {
         travelType: expenseType.toUpperCase(),
         grade: grade,
         policySnapshot: policySnapshot,
-        fromLocation: fromLocation,
-        toLocation: toLocation,
+        fromLocation: fromLocation.trim(),
+        toLocation: toLocation.trim(),
         date: date,
-        businessPurpose: purpose,
+        businessPurpose: purpose.trim(),
         distanceKm:
           expenseType === 'car' ? parseFloat(kilometers) || 0 : undefined,
         expenses: {
@@ -692,6 +647,8 @@ const Reimbursement = ({ navigation }) => {
           },
           hotel: {
             amount: parseFloat(hotelCost) || 0,
+            paymentMethod:
+              foodPaymentMethod === 'self-paid' ? 'SELF' : 'COMPANY',
           },
           food: {
             amount: parseFloat(foodCost) || 0,
@@ -699,12 +656,19 @@ const Reimbursement = ({ navigation }) => {
               foodPaymentMethod === 'self-paid' ? 'SELF' : 'COMPANY',
           },
         },
-        miscItems: otherExpenses.map(item => ({
-          description: item.description,
-          amount: parseFloat(item.amount) || 0,
-          paymentMethod:
-            item.paymentMethod === 'self-paid' ? 'SELF' : 'COMPANY',
-        })),
+        miscItems: otherExpenses
+          .filter(
+            item =>
+              item.description.trim() &&
+              item.amount &&
+              parseFloat(item.amount) > 0,
+          )
+          .map(item => ({
+            description: item.description.trim(),
+            amount: parseFloat(item.amount),
+            paymentMethod:
+              item.paymentMethod === 'self-paid' ? 'SELF' : 'COMPANY',
+          })),
       };
 
       const receiptFile =
@@ -716,66 +680,33 @@ const Reimbursement = ({ navigation }) => {
             }
           : null;
 
-      console.log('🚀 Submitting expense...');
-      console.log('📋 Data:', JSON.stringify(expenseData, null, 2));
-      if (receiptFile) console.log('📎 File:', receiptFile.name);
-
       const result = await dispatch(createExpense(expenseData, receiptFile));
 
       if (result.success) {
-        const newRequest = {
-          id: result.data._id || result.data.id || Date.now(),
-          type: expenseType,
-          title: `${
-            expenseType.charAt(0).toUpperCase() + expenseType.slice(1)
-          } Travel - ${purpose.substring(0, 30)}`,
-          amount: calculateTotalAmount(),
-          date: date,
-          fromLocation: fromLocation,
-          toLocation: toLocation,
-          purpose: purpose,
-          status: 'pending',
-          submittedDate: new Date().toISOString().split('T')[0],
-          paymentMethod: travelPaymentMethod,
-          travelCost: parseFloat(amount) || 0,
-          hotelCost: parseFloat(hotelCost) || 0,
-          foodCost: parseFloat(foodCost) || 0,
-          otherExpenses: otherExpenses.length > 0 ? otherExpenses : undefined,
-          kilometers: kilometers ? parseFloat(kilometers) : undefined,
-          attachments: selectedFiles.map(f => ({
-            fileName: f.name,
-            type: f.type,
-            size: f.size,
-          })),
-        };
-
-        setReimbursements(prev => [newRequest, ...prev]);
         setShowCreateForm(false);
         resetForm();
-        // Alert.alert(
-        //   'Success',
-        //   result.message || 'Expense submitted successfully!',
-        // );
-        showToast(result.message || 'Expense submitted successfully!', 'success');
+        Alert.alert(
+          'Success',
+          result.message || 'Expense submitted successfully!',
+        );
+        await dispatch(fetchExpenses());
       } else {
-        // Alert.alert('Error', result.error || 'Failed to submit expense');
-        showToast(result.error || 'Failed to submit expense', 'danger');
+        Alert.alert('Error', result.error || 'Failed to submit expense');
       }
     } catch (error) {
-      console.log('Submit error:', error);
-      // Alert.alert('Error', 'Something went wrong. Please try again.');
-      showToast('Something went wrong. Please try again.', 'danger');
+      Alert.alert('Error', 'Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
   };
 
   const resetForm = () => {
-    // Reset all form fields
     setExpenseType('car');
     setAmount('');
     setHotelCost('');
     setFoodCost('');
+    setDate('');
+    setDateDisplay('');
     setFromLocation('');
     setToLocation('');
     setPurpose('');
@@ -785,35 +716,46 @@ const Reimbursement = ({ navigation }) => {
     setKilometers('');
     setSelectedFiles([]);
 
-    // Reset date to today's date
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = (today.getMonth() + 1).toString().padStart(2, '0');
-    const day = today.getDate().toString().padStart(2, '0');
-    const todayFormatted = `${year}-${month}-${day}`;
-    setDate(todayFormatted);
-    setDateDisplay(`${day}/${month}/${year}`);
+    const now = new Date();
+
+    setTempDay(now.getDate());
+    setTempMonth(now.getMonth() + 1);
+    setTempYear(now.getFullYear());
   };
 
   const getFilteredRequests = () => {
-    if (activeFilter === 'new') {
-      return reimbursements.filter(r => r.status === 'pending');
+    if (!expenses || !Array.isArray(expenses)) return [];
+
+    if (activeFilter === 'pending') {
+      return expenses
+        .filter(r => (r.status || '').toUpperCase() === 'PENDING')
+        .reverse();
     } else if (activeFilter === 'approved') {
-      return reimbursements.filter(r => r.status === 'approved');
+      return expenses
+        .filter(r => (r.status || '').toUpperCase() === 'APPROVED')
+        .reverse();
     }
-    return reimbursements;
+
+    return [...expenses].reverse();
   };
 
   const getFilterCounts = () => {
+    if (!expenses || !Array.isArray(expenses)) {
+      return { pending: 0, approved: 0 };
+    }
     return {
-      new: reimbursements.filter(r => r.status === 'pending').length,
-      approved: reimbursements.filter(r => r.status === 'approved').length,
+      pending: expenses.filter(
+        r => (r.status || '').toUpperCase() === 'PENDING',
+      ).length,
+      approved: expenses.filter(
+        r => (r.status || '').toUpperCase() === 'APPROVED',
+      ).length,
     };
   };
 
   const counts = getFilterCounts();
 
-  // ============ VIEW MODAL RENDER COMPONENT ============
+  // ============ VIEW MODAL ============
   const renderViewModal = () => {
     if (!selectedRequest) return null;
 
@@ -831,22 +773,25 @@ const Reimbursement = ({ navigation }) => {
           <View
             style={[styles.modalContent, { backgroundColor: C.background }]}
           >
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, { borderBottomColor: C.border }]}>
               <Text style={[styles.modalTitle, { color: C.textPrimary }]}>
-                Request Details
+                Expense Details
               </Text>
               <TouchableOpacity
                 onPress={() => {
                   setShowViewModal(false);
                   setSelectedRequest(null);
                 }}
+                style={styles.closeButton}
               >
                 <XCircle size={wp('6%')} color={C.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Status Badge */}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.viewModalScroll}
+            >
               <View style={styles.viewStatusContainer}>
                 <View
                   style={[
@@ -859,18 +804,18 @@ const Reimbursement = ({ navigation }) => {
                 >
                   {getStatusIcon(selectedRequest.status)}
                   <Text style={[styles.viewStatusText, { color: '#fff' }]}>
-                    {selectedRequest.status.charAt(0).toUpperCase() +
-                      selectedRequest.status.slice(1)}
+                    {selectedRequest.status
+                      ? selectedRequest.status.charAt(0).toUpperCase() +
+                        selectedRequest.status.slice(1).toLowerCase()
+                      : 'Unknown'}
                   </Text>
                 </View>
               </View>
 
-              {/* Title */}
               <Text style={[styles.viewTitle, { color: C.textPrimary }]}>
-                {selectedRequest.title}
+                {getTravelTypeLabel(selectedRequest.travelType)} Travel Request
               </Text>
 
-              {/* Amount */}
               <View
                 style={[
                   styles.viewAmountCard,
@@ -883,11 +828,10 @@ const Reimbursement = ({ navigation }) => {
                   Total Amount
                 </Text>
                 <Text style={[styles.viewAmountValue, { color: C.primary }]}>
-                  {formatCurrency(selectedRequest.amount)}
+                  {formatCurrency(selectedRequest.totalAmount || 0)}
                 </Text>
               </View>
 
-              {/* Basic Info Section */}
               <View style={styles.viewSection}>
                 <Text
                   style={[styles.viewSectionTitle, { color: C.textPrimary }]}
@@ -902,12 +846,11 @@ const Reimbursement = ({ navigation }) => {
                     Travel Type
                   </Text>
                   <View style={styles.viewTypeBadge}>
-                    {getExpenseIcon(selectedRequest.type)}
+                    {getExpenseIcon(selectedRequest.travelType)}
                     <Text
                       style={[styles.viewInfoValue, { color: C.textPrimary }]}
                     >
-                      {selectedRequest.type.charAt(0).toUpperCase() +
-                        selectedRequest.type.slice(1)}
+                      {getTravelTypeLabel(selectedRequest.travelType)}
                     </Text>
                   </View>
                 </View>
@@ -921,7 +864,7 @@ const Reimbursement = ({ navigation }) => {
                   <Text
                     style={[styles.viewInfoValue, { color: C.textPrimary }]}
                   >
-                    {selectedRequest.fromLocation}
+                    {selectedRequest.fromLocation || 'N/A'}
                   </Text>
                 </View>
 
@@ -934,7 +877,7 @@ const Reimbursement = ({ navigation }) => {
                   <Text
                     style={[styles.viewInfoValue, { color: C.textPrimary }]}
                   >
-                    {selectedRequest.toLocation}
+                    {selectedRequest.toLocation || 'N/A'}
                   </Text>
                 </View>
 
@@ -951,7 +894,7 @@ const Reimbursement = ({ navigation }) => {
                   </Text>
                 </View>
 
-                {selectedRequest.kilometers && (
+                {selectedRequest.distanceKm && (
                   <View style={styles.viewInfoRow}>
                     <Text
                       style={[styles.viewInfoLabel, { color: C.textSecondary }]}
@@ -961,13 +904,12 @@ const Reimbursement = ({ navigation }) => {
                     <Text
                       style={[styles.viewInfoValue, { color: C.textPrimary }]}
                     >
-                      {selectedRequest.kilometers} km
+                      {selectedRequest.distanceKm} km
                     </Text>
                   </View>
                 )}
               </View>
 
-              {/* Purpose Section */}
               <View style={styles.viewSection}>
                 <Text
                   style={[styles.viewSectionTitle, { color: C.textPrimary }]}
@@ -977,11 +919,10 @@ const Reimbursement = ({ navigation }) => {
                 <Text
                   style={[styles.viewPurposeText, { color: C.textSecondary }]}
                 >
-                  {selectedRequest.purpose}
+                  {selectedRequest.businessPurpose || 'N/A'}
                 </Text>
               </View>
 
-              {/* Expense Breakdown */}
               <View style={styles.viewSection}>
                 <Text
                   style={[styles.viewSectionTitle, { color: C.textPrimary }]}
@@ -989,105 +930,186 @@ const Reimbursement = ({ navigation }) => {
                   Expense Breakdown
                 </Text>
 
-                <View
-                  style={[
-                    styles.viewExpenseItem,
-                    { borderBottomColor: C.border },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.viewExpenseLabel,
-                      { color: C.textSecondary },
-                    ]}
-                  >
-                    Travel Cost
-                  </Text>
-                  <Text
-                    style={[styles.viewExpenseAmount, { color: C.textPrimary }]}
-                  >
-                    {formatCurrency(selectedRequest.travelCost || 0)}
-                  </Text>
-                </View>
-
-                {selectedRequest.hotelCost > 0 && (
+                {selectedRequest.expenses?.travel && (
                   <View
                     style={[
                       styles.viewExpenseItem,
                       { borderBottomColor: C.border },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.viewExpenseLabel,
-                        { color: C.textSecondary },
-                      ]}
-                    >
-                      Hotel Cost
-                    </Text>
+                    <View>
+                      <Text
+                        style={[
+                          styles.viewExpenseLabel,
+                          { color: C.textSecondary },
+                        ]}
+                      >
+                        Travel Cost
+                      </Text>
+
+                      <Text
+                        style={{
+                          color: C.textTertiary,
+                          fontSize: wp('2.6%'),
+                          fontFamily: Fonts.medium,
+                          marginTop: hp('0.3%'),
+                        }}
+                      >
+                        Paid By:{' '}
+                        {selectedRequest.expenses.travel.paymentMethod ===
+                        'COMPANY'
+                          ? 'Company'
+                          : 'Self'}
+                      </Text>
+                    </View>
+
                     <Text
                       style={[
                         styles.viewExpenseAmount,
                         { color: C.textPrimary },
                       ]}
                     >
-                      {formatCurrency(selectedRequest.hotelCost)}
+                      {formatCurrency(
+                        selectedRequest.expenses.travel.amount || 0,
+                      )}
                     </Text>
                   </View>
                 )}
 
-                {selectedRequest.foodCost > 0 && (
+                {selectedRequest.expenses?.hotel?.amount > 0 && (
                   <View
                     style={[
                       styles.viewExpenseItem,
                       { borderBottomColor: C.border },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.viewExpenseLabel,
-                        { color: C.textSecondary },
-                      ]}
-                    >
-                      Food Cost
-                    </Text>
+                    <View>
+                      <Text
+                        style={[
+                          styles.viewExpenseLabel,
+                          { color: C.textSecondary },
+                        ]}
+                      >
+                        Hotel Cost
+                      </Text>
+
+                      <Text
+                        style={{
+                          color: C.textTertiary,
+                          fontSize: wp('2.6%'),
+                          fontFamily: Fonts.medium,
+                          marginTop: hp('0.3%'),
+                        }}
+                      >
+                        Paid By:{' '}
+                        {selectedRequest.expenses.hotel.paymentMethod ===
+                        'COMPANY'
+                          ? 'Company'
+                          : 'Self'}
+                      </Text>
+                    </View>
+
                     <Text
                       style={[
                         styles.viewExpenseAmount,
                         { color: C.textPrimary },
                       ]}
                     >
-                      {formatCurrency(selectedRequest.foodCost)}
+                      {formatCurrency(selectedRequest.expenses.hotel.amount)}
                     </Text>
                   </View>
                 )}
 
-                {selectedRequest.otherExpenses?.map((expense, index) => (
+                {selectedRequest.expenses?.food?.amount > 0 && (
                   <View
-                    key={index}
                     style={[
                       styles.viewExpenseItem,
                       { borderBottomColor: C.border },
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.viewExpenseLabel,
-                        { color: C.textSecondary },
-                      ]}
-                    >
-                      {expense.description}
-                    </Text>
+                    <View>
+                      <Text
+                        style={[
+                          styles.viewExpenseLabel,
+                          { color: C.textSecondary },
+                        ]}
+                      >
+                        Food Cost
+                      </Text>
+
+                      <Text
+                        style={{
+                          color: C.textTertiary,
+                          fontSize: wp('2.6%'),
+                          fontFamily: Fonts.medium,
+                          marginTop: hp('0.3%'),
+                        }}
+                      >
+                        Paid By:{' '}
+                        {selectedRequest.expenses.food.paymentMethod ===
+                        'COMPANY'
+                          ? 'Company'
+                          : 'Self'}
+                      </Text>
+                    </View>
+
                     <Text
                       style={[
                         styles.viewExpenseAmount,
                         { color: C.textPrimary },
                       ]}
                     >
-                      {formatCurrency(expense.amount)}
+                      {formatCurrency(selectedRequest.expenses.food.amount)}
                     </Text>
                   </View>
-                ))}
+                )}
+
+                {selectedRequest.miscItems?.length > 0 &&
+                  selectedRequest.miscItems.map((expense, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.viewExpenseItem,
+                        { borderBottomColor: C.border },
+                      ]}
+                    >
+                      <View>
+                        <Text
+                          style={[
+                            styles.viewExpenseLabel,
+                            { color: C.textSecondary },
+                          ]}
+                        >
+                          {expense.description?.length > 20
+                            ? `${expense.description.slice(0, 20)}...`
+                            : expense.description}
+                        </Text>
+
+                        <Text
+                          style={{
+                            color: C.textTertiary,
+                            fontSize: wp('2.6%'),
+                            fontFamily: Fonts.medium,
+                            marginTop: hp('0.3%'),
+                          }}
+                        >
+                          Paid By:{' '}
+                          {expense.paymentMethod === 'COMPANY'
+                            ? 'Company'
+                            : 'Self'}
+                        </Text>
+                      </View>
+
+                      <Text
+                        style={[
+                          styles.viewExpenseAmount,
+                          { color: C.textPrimary },
+                        ]}
+                      >
+                        {formatCurrency(expense.amount)}
+                      </Text>
+                    </View>
+                  ))}
 
                 <View style={[styles.viewExpenseItem, styles.viewTotalRow]}>
                   <Text
@@ -1104,35 +1126,47 @@ const Reimbursement = ({ navigation }) => {
                       { color: C.primary, fontFamily: Fonts.bold },
                     ]}
                   >
-                    {formatCurrency(selectedRequest.amount)}
+                    {formatCurrency(selectedRequest.totalAmount || 0)}
                   </Text>
                 </View>
               </View>
 
-              {/* Payment Method */}
-              <View style={styles.viewSection}>
-                <Text
-                  style={[styles.viewSectionTitle, { color: C.textPrimary }]}
-                >
-                  Payment Method
-                </Text>
-                <View style={styles.viewPaymentBadge}>
-                  {selectedRequest.paymentMethod === 'self-paid' ? (
-                    <Wallet size={wp('4%')} color="#3498DB" />
-                  ) : (
-                    <CreditCard size={wp('4%')} color="#9B59B6" />
-                  )}
+              {selectedRequest.receiptUrl && (
+                <View style={styles.viewSection}>
                   <Text
-                    style={[styles.viewPaymentText, { color: C.textPrimary }]}
+                    style={[styles.viewSectionTitle, { color: C.textPrimary }]}
                   >
-                    {selectedRequest.paymentMethod === 'self-paid'
-                      ? 'Self-Paid'
-                      : 'Company-Paid'}
+                    Receipt
                   </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.viewFileItem,
+                      { backgroundColor: C.surface, borderColor: C.border },
+                    ]}
+                    onPress={() =>
+                      handleOpenReceipt(selectedRequest.receiptUrl)
+                    }
+                    disabled={openingFile}
+                  >
+                    <FileText size={wp('5%')} color="#E74C3C" />
+                    <View style={{ flex: 1 }}>
+                      <Text
+                        style={[styles.viewFileName, { color: C.textPrimary }]}
+                        numberOfLines={1}
+                      >
+                        {selectedRequest.receiptUrl.split('/').pop() ||
+                          'View Receipt'}
+                      </Text>
+                    </View>
+                    {openingFile ? (
+                      <ActivityIndicator color={C.primary} />
+                    ) : (
+                      <Eye size={wp('4%')} color={C.primary} />
+                    )}
+                  </TouchableOpacity>
                 </View>
-              </View>
+              )}
 
-              {/* Submission Info */}
               <View style={styles.viewSection}>
                 <Text
                   style={[styles.viewSectionTitle, { color: C.textPrimary }]}
@@ -1149,97 +1183,32 @@ const Reimbursement = ({ navigation }) => {
                   <Text
                     style={[styles.viewInfoValue, { color: C.textPrimary }]}
                   >
-                    {formatDate(selectedRequest.submittedDate)}
+                    {formatDate(selectedRequest.createdAt)}
                   </Text>
                 </View>
 
-                {selectedRequest.approvedBy && (
-                  <>
-                    <View style={styles.viewInfoRow}>
-                      <Text
-                        style={[
-                          styles.viewInfoLabel,
-                          { color: C.textSecondary },
-                        ]}
-                      >
-                        Approved By
-                      </Text>
-                      <Text
-                        style={[styles.viewInfoValue, { color: C.textPrimary }]}
-                      >
-                        {selectedRequest.approvedBy}
-                      </Text>
-                    </View>
-                    <View style={styles.viewInfoRow}>
-                      <Text
-                        style={[
-                          styles.viewInfoLabel,
-                          { color: C.textSecondary },
-                        ]}
-                      >
-                        Approved On
-                      </Text>
-                      <Text
-                        style={[styles.viewInfoValue, { color: C.textPrimary }]}
-                      >
-                        {formatDate(selectedRequest.approvedDate)}
-                      </Text>
-                    </View>
-                  </>
-                )}
+                <View style={styles.viewInfoRow}>
+                  <Text
+                    style={[styles.viewInfoLabel, { color: C.textSecondary }]}
+                  >
+                    Employee Grade
+                  </Text>
+                  <Text
+                    style={[styles.viewInfoValue, { color: C.textPrimary }]}
+                  >
+                    {selectedRequest.grade || 'N/A'}
+                  </Text>
+                </View>
               </View>
 
-              {/* Attachments */}
-              {selectedRequest.attachments &&
-                selectedRequest.attachments.length > 0 && (
-                  <View style={styles.viewSection}>
-                    <Text
-                      style={[
-                        styles.viewSectionTitle,
-                        { color: C.textPrimary },
-                      ]}
-                    >
-                      Attachments
-                    </Text>
-                    {selectedRequest.attachments.map((file, index) => (
-                      <View
-                        key={index}
-                        style={[
-                          styles.viewFileItem,
-                          { backgroundColor: C.surface, borderColor: C.border },
-                        ]}
-                      >
-                        {getFileIcon(file.type, wp('5%'))}
-                        <Text
-                          style={[
-                            styles.viewFileName,
-                            { color: C.textPrimary },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {file.fileName}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
-
-              {/* Close Button */}
               <TouchableOpacity
-                style={[
-                  styles.closeViewBtn,
-                  { backgroundColor: C.surface, borderColor: C.border },
-                ]}
+                style={[styles.closeViewBtn, { backgroundColor: C.primary }]}
                 onPress={() => {
                   setShowViewModal(false);
                   setSelectedRequest(null);
                 }}
               >
-                <Text
-                  style={[styles.closeViewBtnText, { color: C.textPrimary }]}
-                >
-                  Close
-                </Text>
+                <Text style={styles.closeViewBtnText}>Close</Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -1248,15 +1217,54 @@ const Reimbursement = ({ navigation }) => {
     );
   };
 
-  // ============ CUSTOM DATE PICKER MODAL COMPONENT ============
+  // ============ DATE PICKER MODAL ============
   const renderDatePickerModal = () => {
     const daysInMonth = getDaysInMonth(tempMonth, tempYear);
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
     const months = Array.from({ length: 12 }, (_, i) => i + 1);
     const years = Array.from(
       { length: 50 },
-      (_, i) => new Date().getFullYear() + i,
+      (_, i) => new Date().getFullYear() - 10 + i,
     );
+
+    const dayScrollRef = useRef(null);
+    const monthScrollRef = useRef(null);
+    const yearScrollRef = useRef(null);
+
+    const ITEM_HEIGHT = hp('5%');
+
+    // Fixed: Use layout effect with cleanup
+    useLayoutEffect(() => {
+      if (!showDatePickerModal) return;
+
+      const timer = setTimeout(() => {
+        if (dayScrollRef.current && tempDay) {
+          const dayIndex = tempDay - 1;
+          dayScrollRef.current.scrollTo({
+            y: dayIndex * ITEM_HEIGHT,
+            animated: false,
+          });
+        }
+        if (monthScrollRef.current && tempMonth) {
+          const monthIndex = tempMonth - 1;
+          monthScrollRef.current.scrollTo({
+            y: monthIndex * ITEM_HEIGHT,
+            animated: false,
+          });
+        }
+        if (yearScrollRef.current && tempYear) {
+          const yearIndex = years.indexOf(tempYear);
+          if (yearIndex !== -1) {
+            yearScrollRef.current.scrollTo({
+              y: yearIndex * ITEM_HEIGHT,
+              animated: false,
+            });
+          }
+        }
+      }, 50);
+
+      return () => clearTimeout(timer);
+    }, [showDatePickerModal, tempDay, tempMonth, tempYear, years, ITEM_HEIGHT]);
 
     return (
       <Modal
@@ -1272,7 +1280,9 @@ const Reimbursement = ({ navigation }) => {
               { backgroundColor: C.background },
             ]}
           >
-            <View style={styles.datePickerHeader}>
+            <View
+              style={[styles.datePickerHeader, { borderBottomColor: C.border }]}
+            >
               <Text style={[styles.datePickerTitle, { color: C.textPrimary }]}>
                 Select Date
               </Text>
@@ -1282,7 +1292,6 @@ const Reimbursement = ({ navigation }) => {
             </View>
 
             <View style={styles.datePickerColumns}>
-              {/* Day Column */}
               <View style={styles.datePickerColumn}>
                 <Text
                   style={[
@@ -1293,6 +1302,7 @@ const Reimbursement = ({ navigation }) => {
                   Day
                 </Text>
                 <ScrollView
+                  ref={dayScrollRef}
                   showsVerticalScrollIndicator={false}
                   style={styles.datePickerScroll}
                   contentContainerStyle={styles.datePickerScrollContent}
@@ -1304,6 +1314,8 @@ const Reimbursement = ({ navigation }) => {
                         styles.datePickerItem,
                         tempDay === day && {
                           backgroundColor: C.primary + '20',
+                          borderLeftWidth: 3,
+                          borderLeftColor: C.primary,
                         },
                       ]}
                       onPress={() => setTempDay(day)}
@@ -1324,7 +1336,6 @@ const Reimbursement = ({ navigation }) => {
                 </ScrollView>
               </View>
 
-              {/* Month Column */}
               <View style={styles.datePickerColumn}>
                 <Text
                   style={[
@@ -1335,6 +1346,7 @@ const Reimbursement = ({ navigation }) => {
                   Month
                 </Text>
                 <ScrollView
+                  ref={monthScrollRef}
                   showsVerticalScrollIndicator={false}
                   style={styles.datePickerScroll}
                   contentContainerStyle={styles.datePickerScrollContent}
@@ -1346,11 +1358,12 @@ const Reimbursement = ({ navigation }) => {
                         styles.datePickerItem,
                         tempMonth === month && {
                           backgroundColor: C.primary + '20',
+                          borderLeftWidth: 3,
+                          borderLeftColor: C.primary,
                         },
                       ]}
                       onPress={() => {
                         setTempMonth(month);
-                        // Adjust day if current day exceeds days in new month
                         const maxDays = getDaysInMonth(month, tempYear);
                         if (tempDay > maxDays) {
                           setTempDay(maxDays);
@@ -1374,7 +1387,6 @@ const Reimbursement = ({ navigation }) => {
                 </ScrollView>
               </View>
 
-              {/* Year Column */}
               <View style={styles.datePickerColumn}>
                 <Text
                   style={[
@@ -1385,6 +1397,7 @@ const Reimbursement = ({ navigation }) => {
                   Year
                 </Text>
                 <ScrollView
+                  ref={yearScrollRef}
                   showsVerticalScrollIndicator={false}
                   style={styles.datePickerScroll}
                   contentContainerStyle={styles.datePickerScrollContent}
@@ -1396,11 +1409,12 @@ const Reimbursement = ({ navigation }) => {
                         styles.datePickerItem,
                         tempYear === year && {
                           backgroundColor: C.primary + '20',
+                          borderLeftWidth: 3,
+                          borderLeftColor: C.primary,
                         },
                       ]}
                       onPress={() => {
                         setTempYear(year);
-                        // Adjust day if current day exceeds days in new year-month
                         const maxDays = getDaysInMonth(tempMonth, year);
                         if (tempDay > maxDays) {
                           setTempDay(maxDays);
@@ -1425,7 +1439,9 @@ const Reimbursement = ({ navigation }) => {
               </View>
             </View>
 
-            <View style={styles.datePickerButtons}>
+            <View
+              style={[styles.datePickerButtons, { borderTopColor: C.border }]}
+            >
               <TouchableOpacity
                 style={[styles.datePickerCancelBtn, { borderColor: C.border }]}
                 onPress={() => setShowDatePickerModal(false)}
@@ -1455,11 +1471,13 @@ const Reimbursement = ({ navigation }) => {
     );
   };
 
+  const filteredRequests = getFilteredRequests();
+  const isLoadingOrEmpty = loading || !initialLoadingDone;
+
   return (
     <View style={[styles.container, { backgroundColor: C.background }]}>
       <StatusBar barStyle={C.statusBar} backgroundColor={C.background} />
 
-      {/* Header */}
       <View
         style={[
           styles.header,
@@ -1481,7 +1499,7 @@ const Reimbursement = ({ navigation }) => {
             {t.reimbursement?.title || 'Reimbursement'}
           </Text>
           <Text style={[styles.pageSubtitle, { color: C.textSecondary }]}>
-            {reimbursements.length} Total Requests
+            {expenses?.length || 0} Total Requests
           </Text>
         </View>
 
@@ -1493,27 +1511,28 @@ const Reimbursement = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Filter Tabs */}
       <View style={[styles.filterContainer, { borderBottomColor: C.border }]}>
         <TouchableOpacity
           style={[
             styles.filterTab,
-            activeFilter === 'new' && styles.activeFilterTab,
-            activeFilter === 'new' && { borderBottomColor: C.primary },
+            activeFilter === 'pending' && styles.activeFilterTab,
+            activeFilter === 'pending' && { borderBottomColor: C.primary },
           ]}
-          onPress={() => setActiveFilter('new')}
+          onPress={() => setActiveFilter('pending')}
         >
           <Clock
             size={wp('4%')}
-            color={activeFilter === 'new' ? C.primary : C.textSecondary}
+            color={activeFilter === 'pending' ? C.primary : C.textSecondary}
           />
           <Text
             style={[
               styles.filterText,
-              { color: activeFilter === 'new' ? C.primary : C.textSecondary },
+              {
+                color: activeFilter === 'pending' ? C.primary : C.textSecondary,
+              },
             ]}
           >
-            Pending Requests ({counts.new})
+            Pending ({counts.pending})
           </Text>
         </TouchableOpacity>
 
@@ -1543,7 +1562,6 @@ const Reimbursement = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}
@@ -1556,7 +1574,14 @@ const Reimbursement = ({ navigation }) => {
           />
         }
       >
-        {getFilteredRequests().length === 0 ? (
+        {isLoadingOrEmpty ? (
+          <View style={styles.emptyContainer}>
+            <ActivityIndicator size="large" color={C.primary} />
+            <Text style={[styles.emptyText, { color: C.textSecondary }]}>
+              Loading requests...
+            </Text>
+          </View>
+        ) : filteredRequests.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Receipt
               size={wp('15%')}
@@ -1564,18 +1589,18 @@ const Reimbursement = ({ navigation }) => {
               strokeWidth={1.5}
             />
             <Text style={[styles.emptyText, { color: C.textSecondary }]}>
-              No {activeFilter === 'new' ? 'pending' : 'approved'} requests
+              No {activeFilter} requests
             </Text>
             <Text style={[styles.emptySubText, { color: C.textTertiary }]}>
-              {activeFilter === 'new'
+              {activeFilter === 'pending'
                 ? 'Tap + button to create a new request'
                 : 'Approved requests will appear here'}
             </Text>
           </View>
         ) : (
-          getFilteredRequests().map(item => (
+          filteredRequests.map(item => (
             <TouchableOpacity
-              key={item.id}
+              key={item._id || item.id}
               activeOpacity={0.7}
               onPress={() => handleViewRequest(item)}
             >
@@ -1587,37 +1612,27 @@ const Reimbursement = ({ navigation }) => {
               >
                 <View style={styles.cardHeader}>
                   <View style={styles.typeIcon}>
-                    {getExpenseIcon(item.type)}
+                    {getExpenseIcon(item.travelType)}
                   </View>
                   <View style={styles.cardInfo}>
                     <Text
                       style={[styles.requestTitle, { color: C.textPrimary }]}
                       numberOfLines={1}
                     >
-                      {item.title}
+                      {getTravelTypeLabel(item.travelType)} Travel
                     </Text>
                     <Text
                       style={[styles.requestDate, { color: C.textSecondary }]}
                     >
-                      {formatDate(item.date)} • {item.fromLocation} →{' '}
-                      {item.toLocation}
+                      {formatDate(item.date)} •{' '}
+                      {truncateText(item.fromLocation, 20)} →{' '}
+                      {truncateText(item.toLocation, 20)}
                     </Text>
                   </View>
                   <View style={styles.cardRightActions}>
                     <Text style={[styles.amount, { color: C.primary }]}>
-                      {formatCurrency(item.amount)}
+                      {formatCurrency(item.totalAmount || 0)}
                     </Text>
-                    {item.status === 'pending' && (
-                      <TouchableOpacity
-                        style={styles.deleteIconBtn}
-                        onPress={e => {
-                          e.stopPropagation();
-                          handleDeleteRequest(item);
-                        }}
-                      >
-                        <Trash2 size={wp('4.5%')} color="#E74C3C" />
-                      </TouchableOpacity>
-                    )}
                   </View>
                 </View>
 
@@ -1634,26 +1649,11 @@ const Reimbursement = ({ navigation }) => {
                       style={[styles.detailValue, { color: C.textPrimary }]}
                       numberOfLines={2}
                     >
-                      {item.purpose}
+                      {truncateText(item.businessPurpose, 30)}
                     </Text>
                   </View>
 
                   <View style={styles.paymentMethodRow}>
-                    <View style={styles.paymentBadge}>
-                      {item.paymentMethod === 'self-paid' ? (
-                        <Wallet size={wp('3%')} color="#3498DB" />
-                      ) : (
-                        <CreditCard size={wp('3%')} color="#9B59B6" />
-                      )}
-                      <Text
-                        style={[styles.paymentText, { color: C.textSecondary }]}
-                      >
-                        {item.paymentMethod === 'self-paid'
-                          ? 'Self-Paid'
-                          : 'Company-Paid'}
-                      </Text>
-                    </View>
-
                     <View
                       style={[
                         styles.statusBadge,
@@ -1667,20 +1667,13 @@ const Reimbursement = ({ navigation }) => {
                           { color: getStatusColor(item.status).color },
                         ]}
                       >
-                        {item.status.charAt(0).toUpperCase() +
-                          item.status.slice(1)}
+                        {item.status
+                          ? item.status.charAt(0).toUpperCase() +
+                            item.status.slice(1).toLowerCase()
+                          : 'Unknown'}
                       </Text>
                     </View>
                   </View>
-
-                  {item.status === 'approved' && item.approvedBy && (
-                    <Text
-                      style={[styles.approvedText, { color: C.textTertiary }]}
-                    >
-                      Approved by {item.approvedBy} on{' '}
-                      {formatDate(item.approvedDate)}
-                    </Text>
-                  )}
                 </View>
               </View>
             </TouchableOpacity>
@@ -1694,7 +1687,7 @@ const Reimbursement = ({ navigation }) => {
         animationType="slide"
         transparent={true}
         onRequestClose={() => {
-          resetForm(); // 👈 Add this line
+          resetForm();
           setShowCreateForm(false);
         }}
       >
@@ -1702,13 +1695,13 @@ const Reimbursement = ({ navigation }) => {
           <View
             style={[styles.modalContent, { backgroundColor: C.background }]}
           >
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, { borderBottomColor: C.border }]}>
               <Text style={[styles.modalTitle, { color: C.textPrimary }]}>
                 New Reimbursement Request
               </Text>
               <TouchableOpacity
                 onPress={() => {
-                  resetForm(); // 👈 Add this line
+                  resetForm();
                   setShowCreateForm(false);
                 }}
               >
@@ -1717,7 +1710,6 @@ const Reimbursement = ({ navigation }) => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              {/* Travel Type Selection */}
               <Text style={[styles.inputLabel, { color: C.textSecondary }]}>
                 Travel Type *
               </Text>
@@ -1782,7 +1774,6 @@ const Reimbursement = ({ navigation }) => {
                 ))}
               </View>
 
-              {/* Car KM */}
               {expenseType === 'car' && (
                 <View>
                   <Text style={[styles.inputLabel, { color: C.textSecondary }]}>
@@ -1801,12 +1792,14 @@ const Reimbursement = ({ navigation }) => {
                     placeholderTextColor={C.textTertiary}
                     keyboardType="numeric"
                     value={kilometers}
-                    onChangeText={setKilometers}
+                    onChangeText={text =>
+                      setKilometers(validateKilometers(text))
+                    }
+                    maxLength={6}
                   />
                 </View>
               )}
 
-              {/* Amount */}
               <Text style={[styles.inputLabel, { color: C.textSecondary }]}>
                 Travel Amount *
               </Text>
@@ -1823,10 +1816,10 @@ const Reimbursement = ({ navigation }) => {
                 placeholderTextColor={C.textTertiary}
                 keyboardType="numeric"
                 value={amount}
-                onChangeText={setAmount}
+                onChangeText={text => setAmount(validateAmount(text))}
+                maxLength={AMOUNT_MAX_LENGTH}
               />
 
-              {/* Payment Method */}
               <Text style={[styles.inputLabel, { color: C.textSecondary }]}>
                 Payment Method *
               </Text>
@@ -1899,11 +1892,9 @@ const Reimbursement = ({ navigation }) => {
                 </TouchableOpacity>
               </View>
 
-              {/* Hotel & Food */}
               <Text style={[styles.sectionTitle, { color: C.textPrimary }]}>
                 Additional Expenses (Optional)
               </Text>
-
               <Text style={[styles.inputLabel, { color: C.textSecondary }]}>
                 Hotel Cost
               </Text>
@@ -1920,9 +1911,9 @@ const Reimbursement = ({ navigation }) => {
                 placeholderTextColor={C.textTertiary}
                 keyboardType="numeric"
                 value={hotelCost}
-                onChangeText={setHotelCost}
+                onChangeText={text => setHotelCost(validateAmount(text))}
+                maxLength={AMOUNT_MAX_LENGTH}
               />
-
               <Text style={[styles.inputLabel, { color: C.textSecondary }]}>
                 Food Cost
               </Text>
@@ -1939,10 +1930,10 @@ const Reimbursement = ({ navigation }) => {
                 placeholderTextColor={C.textTertiary}
                 keyboardType="numeric"
                 value={foodCost}
-                onChangeText={setFoodCost}
+                onChangeText={text => setFoodCost(validateAmount(text))}
+                maxLength={AMOUNT_MAX_LENGTH}
               />
 
-              {/* Other Expenses */}
               <View style={styles.otherExpensesHeader}>
                 <Text style={[styles.sectionTitle, { color: C.textPrimary }]}>
                   Other Expenses
@@ -1970,12 +1961,13 @@ const Reimbursement = ({ navigation }) => {
                         flex: 2,
                       },
                     ]}
-                    placeholder="Description"
+                    placeholder="Description (max 30 chars)"
                     placeholderTextColor={C.textTertiary}
                     value={expense.description}
                     onChangeText={text =>
                       updateOtherExpense(expense.id, 'description', text)
                     }
+                    maxLength={DESCRIPTION_MAX_LENGTH}
                   />
                   <TextInput
                     style={[
@@ -1994,6 +1986,7 @@ const Reimbursement = ({ navigation }) => {
                     onChangeText={text =>
                       updateOtherExpense(expense.id, 'amount', text)
                     }
+                    maxLength={AMOUNT_MAX_LENGTH}
                   />
                   <TouchableOpacity
                     onPress={() => removeOtherExpense(expense.id)}
@@ -2003,137 +1996,118 @@ const Reimbursement = ({ navigation }) => {
                 </View>
               ))}
 
-              {/* File Selection Section */}
-              <View
-                style={[styles.uploadSection, { borderTopColor: C.border }]}
-              >
-                <View style={styles.uploadSectionHeader}>
-                  <View>
-                    <Text
-                      style={[styles.sectionTitle, { color: C.textPrimary }]}
-                    >
-                      Receipts & Documents
-                    </Text>
-                    <Text
-                      style={[styles.uploadSubtitle, { color: C.textTertiary }]}
-                    >
-                      Select PDF, JPG, or PNG files (Max 5) -{' '}
-                      {selectedFiles.length}/5
-                    </Text>
-                  </View>
-                  {selectedFiles.length > 0 && (
-                    <TouchableOpacity
-                      onPress={showFilePickerOptions}
-                      style={[styles.addMoreBtn, { borderColor: C.primary }]}
-                    >
-                      <Plus size={wp('3.5%')} color={C.primary} />
-                      <Text style={[styles.addMoreText, { color: C.primary }]}>
-                        Add More
-                      </Text>
-                    </TouchableOpacity>
-                  )}
+              <View style={styles.uploadSectionHeader}>
+                <View>
+                  <Text style={[styles.sectionTitle, { color: C.textPrimary }]}>
+                    Receipt/Document *
+                  </Text>
+                  <Text
+                    style={[styles.uploadSubtitle, { color: C.textTertiary }]}
+                  >
+                    Upload 1 file only (PDF, JPG, or PNG, Max {MAX_FILE_SIZE_MB}
+                    MB) - {selectedFiles.length}/1
+                  </Text>
                 </View>
-
-                {selectedFiles.length === 0 ? (
-                  <View style={styles.uploadButtonsContainer}>
-                    <TouchableOpacity
-                      style={[
-                        styles.uploadOptionBtn,
-                        { backgroundColor: C.surface, borderColor: C.border },
-                      ]}
-                      onPress={showFilePickerOptions}
-                    >
-                      <View
-                        style={[
-                          styles.uploadIconCircle,
-                          { backgroundColor: C.primary + '15' },
-                        ]}
-                      >
-                        <FilePlus size={wp('6%')} color={C.primary} />
-                      </View>
-                      <Text
-                        style={[
-                          styles.uploadOptionTitle,
-                          { color: C.textPrimary },
-                        ]}
-                      >
-                        Browse Files
-                      </Text>
-                      <Text
-                        style={[
-                          styles.uploadOptionSubtitle,
-                          { color: C.textTertiary },
-                        ]}
-                      >
-                        PDF, JPG, PNG{`\n`}(Max 3 MB)
-                      </Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <View style={styles.fileListContainer}>
-                    {selectedFiles.map(file => (
-                      <View
-                        key={file.id}
-                        style={[
-                          styles.fileItemCard,
-                          { backgroundColor: C.surface, borderColor: C.border },
-                        ]}
-                      >
-                        <View style={styles.filePreviewContainer}>
-                          {file.type === 'jpg' ||
-                          file.type === 'png' ||
-                          file.type === 'jpeg' ? (
-                            <Image
-                              source={{ uri: file.uri }}
-                              style={styles.fileThumbnail}
-                              resizeMode="cover"
-                            />
-                          ) : (
-                            <View
-                              style={[
-                                styles.fileTypeIcon,
-                                { backgroundColor: '#E74C3C15' },
-                              ]}
-                            >
-                              <FileText size={wp('7%')} color="#E74C3C" />
-                            </View>
-                          )}
-                        </View>
-
-                        <View style={styles.fileDetailsContainer}>
-                          <Text
-                            style={[styles.fileName, { color: C.textPrimary }]}
-                            numberOfLines={1}
-                          >
-                            {file.name}
-                          </Text>
-                          <Text
-                            style={[
-                              styles.fileMetaText,
-                              { color: C.textSecondary },
-                            ]}
-                          >
-                            {formatFileSize(file.size)} •{' '}
-                            {file.type.toUpperCase()}
-                          </Text>
-                        </View>
-
-                        <TouchableOpacity
-                          style={[
-                            styles.iconButton,
-                            { backgroundColor: '#E74C3C15' },
-                          ]}
-                          onPress={() => removeFile(file.id)}
-                        >
-                          <Trash2 size={wp('4%')} color="#E74C3C" />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </View>
-                )}
               </View>
 
-              {/* Date */}
+              {selectedFiles.length === 0 ? (
+                <View style={styles.uploadButtonsContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.uploadOptionBtn,
+                      { backgroundColor: C.surface, borderColor: C.border },
+                    ]}
+                    onPress={showFilePickerOptions}
+                  >
+                    <View
+                      style={[
+                        styles.uploadIconCircle,
+                        { backgroundColor: C.primary + '15' },
+                      ]}
+                    >
+                      <FilePlus size={wp('6%')} color={C.primary} />
+                    </View>
+                    <Text
+                      style={[
+                        styles.uploadOptionTitle,
+                        { color: C.textPrimary },
+                      ]}
+                    >
+                      Upload Files
+                    </Text>
+                    <Text
+                      style={[
+                        styles.uploadOptionSubtitle,
+                        { color: C.textTertiary },
+                      ]}
+                    >
+                      PDF, JPG, PNG{`\n`}(Max {MAX_FILE_SIZE_MB}MB)
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.fileListContainer}>
+                  {selectedFiles.map(file => (
+                    <View
+                      key={file.id}
+                      style={[
+                        styles.fileItemCard,
+                        { backgroundColor: C.surface, borderColor: C.border },
+                      ]}
+                    >
+                      <View style={styles.filePreviewContainer}>
+                        {file.type === 'jpg' ||
+                        file.type === 'png' ||
+                        file.type === 'jpeg' ? (
+                          <Image
+                            source={{ uri: file.uri }}
+                            style={styles.fileThumbnail}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <View
+                            style={[
+                              styles.fileTypeIcon,
+                              { backgroundColor: '#E74C3C15' },
+                            ]}
+                          >
+                            <FileText size={wp('7%')} color="#E74C3C" />
+                          </View>
+                        )}
+                      </View>
+
+                      <View style={styles.fileDetailsContainer}>
+                        <Text
+                          style={[styles.fileName, { color: C.textPrimary }]}
+                          numberOfLines={1}
+                        >
+                          {truncateText(file.name, 30)}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.fileMetaText,
+                            { color: C.textSecondary },
+                          ]}
+                        >
+                          {formatFileSize(file.size)} •{' '}
+                          {file.type.toUpperCase()}
+                        </Text>
+                      </View>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.iconButton,
+                          { backgroundColor: '#E74C3C15' },
+                        ]}
+                        onPress={() => removeFile(file.id)}
+                      >
+                        <Trash2 size={wp('4%')} color="#E74C3C" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               <Text style={[styles.inputLabel, { color: C.textSecondary }]}>
                 Date *
               </Text>
@@ -2157,10 +2131,8 @@ const Reimbursement = ({ navigation }) => {
                   {dateDisplay || 'DD/MM/YYYY'}
                 </Text>
               </TouchableOpacity>
-
               {renderDatePickerModal()}
 
-              {/* Locations */}
               <Text style={[styles.inputLabel, { color: C.textSecondary }]}>
                 From Location *
               </Text>
@@ -2173,10 +2145,11 @@ const Reimbursement = ({ navigation }) => {
                     color: C.textPrimary,
                   },
                 ]}
-                placeholder="Starting point"
+                placeholder="Starting point (max 30 chars)"
                 placeholderTextColor={C.textTertiary}
                 value={fromLocation}
-                onChangeText={setFromLocation}
+                onChangeText={text => setFromLocation(validateLocation(text))}
+                maxLength={LOCATION_MAX_LENGTH}
               />
 
               <Text style={[styles.inputLabel, { color: C.textSecondary }]}>
@@ -2191,13 +2164,13 @@ const Reimbursement = ({ navigation }) => {
                     color: C.textPrimary,
                   },
                 ]}
-                placeholder="Destination"
+                placeholder="Destination (max 30 chars)"
                 placeholderTextColor={C.textTertiary}
                 value={toLocation}
-                onChangeText={setToLocation}
+                onChangeText={text => setToLocation(validateLocation(text))}
+                maxLength={LOCATION_MAX_LENGTH}
               />
 
-              {/* Purpose */}
               <Text style={[styles.inputLabel, { color: C.textSecondary }]}>
                 Business Purpose *
               </Text>
@@ -2210,15 +2183,15 @@ const Reimbursement = ({ navigation }) => {
                     color: C.textPrimary,
                   },
                 ]}
-                placeholder="Describe the purpose..."
+                placeholder="Describe the purpose (max 30 chars)..."
                 placeholderTextColor={C.textTertiary}
                 multiline
                 numberOfLines={3}
                 value={purpose}
-                onChangeText={setPurpose}
+                onChangeText={text => setPurpose(validatePurpose(text))}
+                maxLength={PURPOSE_MAX_LENGTH}
               />
 
-              {/* Total */}
               <View
                 style={[styles.totalContainer, { borderTopColor: C.border }]}
               >
@@ -2230,7 +2203,6 @@ const Reimbursement = ({ navigation }) => {
                 </Text>
               </View>
 
-              {/* Submit */}
               <TouchableOpacity
                 style={[
                   styles.submitBtn,
@@ -2243,7 +2215,7 @@ const Reimbursement = ({ navigation }) => {
               >
                 {submitting ? (
                   <View style={styles.submittingContainer}>
-                    <Loader size={wp('4%')} color="#fff" />
+                    <ActivityIndicator color="#fff" />
                     <Text style={styles.submitBtnText}>Submitting...</Text>
                   </View>
                 ) : (
@@ -2255,7 +2227,6 @@ const Reimbursement = ({ navigation }) => {
         </View>
       </Modal>
 
-      {/* View Details Modal */}
       {renderViewModal()}
     </View>
   );
@@ -2342,9 +2313,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: wp('2%'),
   },
-  deleteIconBtn: {
-    padding: wp('1%'),
-  },
   divider: { height: 1, marginVertical: hp('1.5%') },
   cardDetails: { gap: hp('1%') },
   detailRow: { flexDirection: 'row', gap: wp('2%') },
@@ -2356,11 +2324,9 @@ const styles = StyleSheet.create({
   detailValue: { fontSize: wp('2.8%'), fontFamily: Fonts.regular, flex: 1 },
   paymentMethodRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
     alignItems: 'center',
   },
-  paymentBadge: { flexDirection: 'row', alignItems: 'center', gap: wp('1%') },
-  paymentText: { fontSize: wp('2.5%'), fontFamily: Fonts.regular },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2370,7 +2336,6 @@ const styles = StyleSheet.create({
     gap: wp('1%'),
   },
   statusText: { fontSize: wp('2.5%'), fontFamily: Fonts.medium },
-  approvedText: { fontSize: wp('2.2%'), fontFamily: Fonts.regular },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -2404,6 +2369,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: hp('2%'),
+    paddingBottom: hp('1.5%'),
+    borderBottomWidth: 1,
+  },
+  closeButton: {
+    padding: wp('1%'),
   },
   modalTitle: { fontSize: wp('4.5%'), fontFamily: Fonts.bold },
   inputLabel: {
@@ -2490,13 +2460,6 @@ const styles = StyleSheet.create({
     fontSize: wp('2.8%'),
     fontFamily: Fonts.regular,
   },
-
-  // File Upload Section
-  uploadSection: {
-    marginTop: hp('2%'),
-    paddingTop: hp('2%'),
-    borderTopWidth: 1,
-  },
   uploadSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2508,16 +2471,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
     marginTop: hp('0.3%'),
   },
-  addMoreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: wp('2%'),
-    paddingHorizontal: wp('2.5%'),
-    paddingVertical: hp('0.6%'),
-    gap: wp('1%'),
-  },
-  addMoreText: { fontSize: wp('2.8%'), fontFamily: Fonts.medium },
   uploadButtonsContainer: {
     flexDirection: 'row',
     gap: wp('3%'),
@@ -2545,8 +2498,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.regular,
     textAlign: 'center',
   },
-
-  // File List
   fileListContainer: { gap: hp('1%') },
   fileItemCard: {
     flexDirection: 'row',
@@ -2580,8 +2531,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  // Total & Submit
   totalContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2610,8 +2559,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: wp('2%'),
   },
-
-  // View Modal Styles
   viewStatusContainer: {
     alignItems: 'center',
     marginBottom: hp('2%'),
@@ -2723,7 +2670,6 @@ const styles = StyleSheet.create({
   viewFileName: {
     fontSize: wp('2.8%'),
     fontFamily: Fonts.regular,
-    flex: 1,
   },
   closeViewBtn: {
     paddingVertical: hp('1.5%'),
@@ -2731,14 +2677,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: hp('2%'),
     marginBottom: hp('2%'),
-    borderWidth: 1,
   },
   closeViewBtnText: {
     fontSize: wp('3.5%'),
     fontFamily: Fonts.medium,
+    color: '#fff',
   },
-  // ============ ADD THESE STYLES TO YOUR STYLESHEET ============
-  // Date Picker Styles
   dateInput: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2776,7 +2720,6 @@ const styles = StyleSheet.create({
     marginBottom: hp('2%'),
     paddingBottom: hp('1%'),
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
   },
   datePickerTitle: {
     fontSize: wp('4%'),
@@ -2821,7 +2764,6 @@ const styles = StyleSheet.create({
     marginTop: hp('2%'),
     paddingTop: hp('1.5%'),
     borderTopWidth: 1,
-    borderTopColor: '#E5E5E5',
   },
   datePickerCancelBtn: {
     flex: 1,
@@ -2844,6 +2786,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: wp('3.2%'),
     fontFamily: Fonts.medium,
+  },
+  viewModalScroll: {
+    paddingBottom: hp('2%'),
   },
 });
 

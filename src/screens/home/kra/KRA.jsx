@@ -9,25 +9,28 @@ import {
   Platform,
   ActivityIndicator,
   RefreshControl,
+  Modal,
+  Dimensions,
+  SafeAreaView,
 } from 'react-native';
 import {
   widthPercentageToDP as wp,
   heightPercentageToDP as hp,
 } from 'react-native-responsive-screen';
 import {
-  Star,
   Target,
   TrendingUp,
   Award,
-  BookOpen,
-  ChevronLeft,
   BarChart3,
-  FileText,
-  Download,
-  Clock,
-  AlertCircle,
+  ChevronLeft,
   ChevronDown,
   ChevronUp,
+  X,
+  Calendar,
+  AlertCircle,
+  Clock,
+  CheckCircle,
+  Circle,
 } from 'lucide-react-native';
 import { Fonts } from '../../../utils/GlobalText';
 import { useTheme } from '../../../context/ThemeContext';
@@ -37,8 +40,61 @@ import { useDispatch, useSelector } from 'react-redux';
 import { fetchKRA, updateKRAMetric } from '../../../store/actions/kraActions';
 import { showToast } from '../../../components/common/ToastProvider';
 
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
+
 // ============================================================================
-// CONSTANTS - Extracted for maintainability
+// RESPONSIVE DESIGN SYSTEM
+// ============================================================================
+
+const isTablet = SCREEN_WIDTH > 600;
+const isMobile = SCREEN_WIDTH <= 600;
+
+const RESPONSIVE = {
+  // Spacing
+  xs: wp('1%'),
+  sm: wp('2%'),
+  md: wp('4%'),
+  lg: wp('6%'),
+  xl: wp('8%'),
+
+  // Font Sizes
+  fontSize: {
+    xs: wp(isMobile ? '2.2%' : '1.8%'),
+    sm: wp(isMobile ? '2.5%' : '2%'),
+    base: wp(isMobile ? '3%' : '2.4%'),
+    lg: wp(isMobile ? '3.5%' : '2.8%'),
+    xl: wp(isMobile ? '4%' : '3.2%'),
+    '2xl': wp(isMobile ? '4.5%' : '3.6%'),
+    '3xl': wp(isMobile ? '5%' : '4%'),
+  },
+
+  // Icon Sizes
+  iconSize: {
+    xs: wp(isMobile ? '3%' : '2.4%'),
+    sm: wp(isMobile ? '4%' : '3.2%'),
+    md: wp(isMobile ? '5%' : '4%'),
+    lg: wp(isMobile ? '6%' : '4.8%'),
+    xl: wp(isMobile ? '7%' : '5.6%'),
+  },
+
+  // Component Heights
+  componentHeight: {
+    touchable: hp(isMobile ? '6.5%' : '7%'),
+    button: hp(isMobile ? '5.5%' : '6%'),
+    card: 'auto',
+  },
+
+  // Border Radius
+  borderRadius: {
+    sm: wp(isMobile ? '2%' : '1.5%'),
+    md: wp(isMobile ? '3%' : '2%'),
+    lg: wp(isMobile ? '4%' : '2.5%'),
+    xl: wp(isMobile ? '5%' : '3%'),
+  },
+};
+
+// ============================================================================
+// CONSTANTS
 // ============================================================================
 
 const PERFORMANCE_THRESHOLDS = {
@@ -57,71 +113,28 @@ const PERFORMANCE_COLORS = {
   POOR: { bg: '#EF444420', text: '#F87171', bar: '#F87171' },
 };
 
-const STAR_SIZE = wp('4.5%'); // Improved from 3.5% for better tappability
-const STAR_PADDING = 6; // Improved from 2 for better tap area
-const MIN_TAP_AREA = 48; // Accessibility standard minimum
-
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
 
-/**
- * Get performance color based on achievement percentage
- * @param {number} percentage - Achievement percentage (0-200)
- * @returns {object} - Colors object with bg and text
- */
 const getPerformanceColor = percentage => {
-  if (percentage >= PERFORMANCE_THRESHOLDS.EXCELLENT) {
+  if (percentage >= PERFORMANCE_THRESHOLDS.EXCELLENT)
     return PERFORMANCE_COLORS.EXCELLENT;
-  }
-  if (percentage >= PERFORMANCE_THRESHOLDS.GOOD) {
-    return PERFORMANCE_COLORS.GOOD;
-  }
-  if (percentage >= PERFORMANCE_THRESHOLDS.FAIR) {
-    return PERFORMANCE_COLORS.FAIR;
-  }
-  if (percentage >= PERFORMANCE_THRESHOLDS.NEEDS_IMPROVEMENT) {
+  if (percentage >= PERFORMANCE_THRESHOLDS.GOOD) return PERFORMANCE_COLORS.GOOD;
+  if (percentage >= PERFORMANCE_THRESHOLDS.FAIR) return PERFORMANCE_COLORS.FAIR;
+  if (percentage >= PERFORMANCE_THRESHOLDS.NEEDS_IMPROVEMENT)
     return PERFORMANCE_COLORS.NEEDS_IMPROVEMENT;
-  }
   return PERFORMANCE_COLORS.POOR;
 };
 
-/**
- * Get performance bar color based on achievement percentage
- * @param {number} percentage - Achievement percentage
- * @returns {string} - Color hex code
- */
-const getPerformanceBarColor = percentage => {
-  return getPerformanceColor(percentage).bar;
-};
+const getPerformanceBarColor = percentage =>
+  getPerformanceColor(percentage).bar;
 
-/**
- * Calculate achievement percentage based on achieved vs target
- * Caps at 200% to show over-achievement
- * @param {number} achieved - Achieved value
- * @param {number} target - Target value
- * @returns {number} - Achievement percentage (0-200)
- */
 const calculateAchievement = (achieved, target) => {
   if (!target || target === 0) return 0;
   return Math.min(Math.round((achieved / target) * 100), 200);
 };
 
-/**
- * Convert 0-100 score to star rating (0-5)
- * @param {number} score - Score value (0-100)
- * @returns {number} - Star rating (0-5)
- */
-const scoreToStars = score => Math.round(score / 20);
-
-/**
- * Get recommendation message based on performance
- * @param {number} avgAchievement - Average achievement percentage
- * @param {number} completedKras - Number of completed KRAs
- * @param {number} totalKras - Total KRAs
- * @param {number} pendingKras - Pending KRAs
- * @returns {object} - Recommendation object with icon, title, message, color
- */
 const getRecommendation = (
   avgAchievement,
   completedKras,
@@ -134,45 +147,332 @@ const getRecommendation = (
       icon: Award,
       title: 'Excellent Performance! 🌟',
       message: `You've achieved ${avgAchievement}% of your targets. Outstanding work! Keep maintaining this excellence.`,
-      bgSuffix: '10',
-      borderSuffix: '30',
       colorKey: 'success',
     };
   }
-
   if (avgAchievement >= 70) {
     return {
       type: 'GOOD',
       icon: TrendingUp,
       title: 'Good Progress! 📈',
-      message: `You're on the right track with ${avgAchievement}% achievement. Focus on completing the remaining ${pendingKras} KRA(s) to reach excellence.`,
-      bgSuffix: '10',
-      borderSuffix: '30',
+      message: `You're on the right track with ${avgAchievement}% achievement. Focus on completing the remaining ${pendingKras} KRA(s).`,
       colorKey: 'info',
     };
   }
-
   if (avgAchievement < 70) {
     return {
       type: 'IMPROVEMENT',
       icon: AlertCircle,
       title: 'Need Improvement 📊',
-      message: `Your achievement rate is ${avgAchievement}%. Consider discussing with your manager for guidance and create an action plan to improve performance.`,
-      bgSuffix: '10',
-      borderSuffix: '30',
+      message: `Your achievement rate is ${avgAchievement}%. Consider discussing with your manager for guidance.`,
       colorKey: 'warning',
     };
   }
-
   return {
     type: 'FOCUS',
     icon: Target,
     title: 'Focus Areas 🎯',
-    message: `${pendingKras} KRA(s) are pending completion. Prioritize these to improve your overall score and achieve your targets.`,
-    bgSuffix: '10',
-    borderSuffix: '30',
+    message: `${pendingKras} KRA(s) are pending completion. Prioritize these to improve your overall score.`,
     colorKey: 'primary',
   };
+};
+
+// ============================================================================
+// KRA DETAIL MODAL COMPONENT
+// ============================================================================
+
+const KRADetailModal = ({ visible, kra, onClose, theme }) => {
+  const C = theme.colors;
+  if (!kra) return null;
+
+  const kraAchievement = kra.achievement || 0;
+  const performanceColor = getPerformanceColor(kraAchievement);
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={onClose}
+    >
+      <SafeAreaView
+        style={[styles.modalOverlay, { backgroundColor: 'rgba(0,0,0,0.5)' }]}
+      >
+        <View
+          style={[styles.modalContainer, { backgroundColor: C.background }]}
+        >
+          {/* Modal Header */}
+          <View style={[styles.modalHeader, { borderBottomColor: C.border }]}>
+            <TouchableOpacity onPress={onClose} style={styles.modalCloseBtn}>
+              <X size={RESPONSIVE.iconSize.lg} color={C.textSecondary} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: C.textPrimary }]}>
+              KRA Details
+            </Text>
+            <View style={{ width: RESPONSIVE.iconSize.lg }} />
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.modalContent}
+          >
+            {/* KRA Header */}
+            <View style={styles.modalKraHeader}>
+              <View
+                style={[
+                  styles.modalKraIcon,
+                  { backgroundColor: C.primary + '20' },
+                ]}
+              >
+                <BarChart3 size={RESPONSIVE.iconSize.xl} color={C.primary} />
+              </View>
+              <View style={styles.modalKraInfo}>
+                <Text style={[styles.modalKraTitle, { color: C.textPrimary }]}>
+                  {kra.title}
+                </Text>
+                <View style={styles.modalKraPeriodContainer}>
+                  <Calendar
+                    size={RESPONSIVE.iconSize.xs}
+                    color={C.textSecondary}
+                  />
+                  <Text
+                    style={[styles.modalKraPeriod, { color: C.textSecondary }]}
+                  >
+                    {kra.period}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Achievement Badge */}
+            <View
+              style={[
+                styles.modalAchievementBadge,
+                { backgroundColor: performanceColor.bg },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.modalAchievementText,
+                  { color: performanceColor.text },
+                ]}
+              >
+                {kraAchievement}% Achievement
+              </Text>
+            </View>
+
+            {/* Description */}
+            {kra.description && (
+              <View style={styles.modalSection}>
+                <Text
+                  style={[styles.modalSectionTitle, { color: C.textPrimary }]}
+                >
+                  Description
+                </Text>
+                <Text
+                  style={[styles.modalDescription, { color: C.textSecondary }]}
+                >
+                  {kra.description}
+                </Text>
+              </View>
+            )}
+
+            {/* Metrics Section */}
+            <View style={styles.modalSection}>
+              <Text
+                style={[styles.modalSectionTitle, { color: C.textPrimary }]}
+              >
+                Metrics & Targets
+              </Text>
+
+              {kra.metricsWithAchievement?.map((metric, index) => {
+                const metricPerformanceColor = getPerformanceColor(
+                  metric.achievement,
+                );
+                return (
+                  <View
+                    key={metric._id || index}
+                    style={[
+                      styles.modalMetricCard,
+                      { backgroundColor: C.surface, borderColor: C.border },
+                    ]}
+                  >
+                    <View style={styles.modalMetricHeader}>
+                      <View style={styles.modalMetricCategory}>
+                        <Text
+                          style={[
+                            styles.modalMetricCategoryText,
+                            { color: C.primary },
+                          ]}
+                        >
+                          {metric.category}
+                        </Text>
+                      </View>
+                      {metric.isCompleted ? (
+                        <CheckCircle
+                          size={RESPONSIVE.iconSize.sm}
+                          color={C.success}
+                        />
+                      ) : (
+                        <Circle
+                          size={RESPONSIVE.iconSize.sm}
+                          color={C.textSecondary}
+                        />
+                      )}
+                    </View>
+
+                    <Text
+                      style={[styles.modalMetricName, { color: C.textPrimary }]}
+                    >
+                      {metric.name}
+                    </Text>
+
+                    <View style={styles.modalMetricStats}>
+                      <View style={styles.modalMetricStat}>
+                        <Text
+                          style={[
+                            styles.modalMetricStatLabel,
+                            { color: C.textSecondary },
+                          ]}
+                        >
+                          Target
+                        </Text>
+                        <Text
+                          style={[
+                            styles.modalMetricStatValue,
+                            { color: C.primary },
+                          ]}
+                        >
+                          {metric.target?.toLocaleString() || 0}
+                        </Text>
+                      </View>
+                      <View style={styles.modalMetricStat}>
+                        <Text
+                          style={[
+                            styles.modalMetricStatLabel,
+                            { color: C.textSecondary },
+                          ]}
+                        >
+                          Achieved
+                        </Text>
+                        <Text
+                          style={[
+                            styles.modalMetricStatValue,
+                            {
+                              color: metric.isCompleted
+                                ? C.success
+                                : C.textPrimary,
+                            },
+                          ]}
+                        >
+                          {metric.achieved?.toLocaleString() || 0}
+                        </Text>
+                      </View>
+                      <View style={styles.modalMetricStat}>
+                        <Text
+                          style={[
+                            styles.modalMetricStatLabel,
+                            { color: C.textSecondary },
+                          ]}
+                        >
+                          Weightage
+                        </Text>
+                        <Text
+                          style={[
+                            styles.modalMetricStatValue,
+                            { color: C.textPrimary },
+                          ]}
+                        >
+                          {metric.weightage || 0}%
+                        </Text>
+                      </View>
+                      <View style={styles.modalMetricStat}>
+                        <Text
+                          style={[
+                            styles.modalMetricStatLabel,
+                            { color: C.textSecondary },
+                          ]}
+                        >
+                          Achievement
+                        </Text>
+                        <Text
+                          style={[
+                            styles.modalMetricStatValue,
+                            { color: metricPerformanceColor.text },
+                          ]}
+                        >
+                          {metric.achievement}%
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Progress Bar */}
+                    <View style={styles.modalProgressBarContainer}>
+                      <View
+                        style={[
+                          styles.modalProgressBar,
+                          {
+                            width: `${Math.min(metric.achievement, 100)}%`,
+                            backgroundColor: getPerformanceBarColor(
+                              metric.achievement,
+                            ),
+                          },
+                        ]}
+                      />
+                    </View>
+
+                    {metric.status === 'pending' && (
+                      <View
+                        style={[
+                          styles.modalPendingBadge,
+                          { backgroundColor: C.warning + '20' },
+                        ]}
+                      >
+                        <Clock
+                          size={RESPONSIVE.iconSize.xs}
+                          color={C.warning}
+                        />
+                        <Text
+                          style={[
+                            styles.modalPendingText,
+                            { color: C.warning },
+                          ]}
+                        >
+                          Pending Review
+                        </Text>
+                      </View>
+                    )}
+
+                    {metric.isCompleted && (
+                      <View
+                        style={[
+                          styles.modalCompletedBadge,
+                          { backgroundColor: C.success + '20' },
+                        ]}
+                      >
+                        <Award
+                          size={RESPONSIVE.iconSize.xs}
+                          color={C.success}
+                        />
+                        <Text
+                          style={[
+                            styles.modalCompletedText,
+                            { color: C.success },
+                          ]}
+                        >
+                          Target Achieved! 🎉
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </ScrollView>
+        </View>
+      </SafeAreaView>
+    </Modal>
+  );
 };
 
 // ============================================================================
@@ -192,6 +492,8 @@ export const KRA = ({ navigation }) => {
   const [expandedKRAs, setExpandedKRAs] = useState({});
   const [refreshing, setRefreshing] = useState(false);
   const [updatingMetrics, setUpdatingMetrics] = useState(new Set());
+  const [selectedKRA, setSelectedKRA] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   // =========================================================================
   // LIFECYCLE HOOKS
@@ -210,12 +512,10 @@ export const KRA = ({ navigation }) => {
       const result = await dispatch(fetchKRA());
       if (result.success && result.data) {
         setKraData(result.data);
-
-        // Initialize expanded state for all KRAs
         const expandedState = {};
         if (result.data.kras) {
           result.data.kras.forEach(kra => {
-            expandedState[kra._id] = true; // Expanded by default
+            expandedState[kra._id] = true;
           });
         }
         setExpandedKRAs(expandedState);
@@ -238,60 +538,7 @@ export const KRA = ({ navigation }) => {
     } finally {
       setRefreshing(false);
     }
-  }, [dispatch]);
-
-  // =========================================================================
-  // METRIC UPDATES (COMMENTED - Waiting for API)
-  // =========================================================================
-
-  /**
-   * TODO: Star rating update functionality
-   *
-   * STATUS: PENDING API IMPLEMENTATION
-   *
-   * Requirements:
-   * - Backend API endpoint: PUT /api/kra/:kraId/metric/:metricId
-   * - Expected payload: { achievedValue: number (0-100) }
-   * - Expected response: { success: boolean, updatedMetric: object }
-   *
-   * Implementation notes:
-   * - Star rating is currently READ-ONLY (disabled)
-   * - Users can see their current rating but cannot change it
-   * - Visual feedback will be added once API is ready
-   * - Loading state will show spinner during API call
-   * - Optimistic updates should be implemented
-   *
-   * To enable when API is ready:
-   * 1. Uncomment handleMetricUpdate function below
-   * 2. Change renderStars to pass onPress handler
-   * 3. Add loading state management
-   * 4. Add success/error feedback
-   */
-
-  /*
-  const handleMetricUpdate = async (kraId, metricId, achievedValue) => {
-    setUpdatingMetrics(prev => new Set(prev).add(`${kraId}-${metricId}`));
-
-    try {
-      const result = await dispatch(updateKRAMetric(kraId, metricId, achievedValue));
-      if (result.success) {
-        showToast('Metric updated successfully!', 'success');
-        await loadKRA(); // Reload to get updated data
-      } else {
-        showToast(result.error || 'Failed to update metric', 'error');
-      }
-    } catch (err) {
-      showToast('Error updating metric', 'error');
-      console.error('Metric Update Error:', err);
-    } finally {
-      setUpdatingMetrics(prev => {
-        const updated = new Set(prev);
-        updated.delete(`${kraId}-${metricId}`);
-        return updated;
-      });
-    }
-  };
-  */
+  }, []);
 
   // =========================================================================
   // UI HANDLERS
@@ -304,11 +551,20 @@ export const KRA = ({ navigation }) => {
     }));
   }, []);
 
+  const handleKraPress = useCallback(kra => {
+    setSelectedKRA(kra);
+    setShowDetailModal(true);
+  }, []);
+
+  const closeDetailModal = useCallback(() => {
+    setShowDetailModal(false);
+    setSelectedKRA(null);
+  }, []);
+
   // =========================================================================
   // MEMOIZED COMPUTATIONS
   // =========================================================================
 
-  // Memoize achievement calculations to avoid recalculating on every render
   const memoizedKRAs = useMemo(() => {
     if (!kraData?.kras) return [];
 
@@ -334,7 +590,6 @@ export const KRA = ({ navigation }) => {
     });
   }, [kraData?.kras]);
 
-  // Memoize summary data
   const memoizedSummary = useMemo(() => {
     return (
       kraData?.summary || {
@@ -349,66 +604,6 @@ export const KRA = ({ navigation }) => {
   }, [kraData?.summary]);
 
   const userProfile = useMemo(() => profile?.[0] || {}, [profile]);
-
-  // =========================================================================
-  // RENDER HELPERS
-  // =========================================================================
-
-  /**
-   * Render star rating component
-   * Currently READ-ONLY (no click handler)
-   * @param {number} rating - Rating score (0-100)
-   * @param {boolean} editable - Whether stars are editable (currently always false)
-   * @param {string} kraId - KRA ID (for API call when ready)
-   * @param {string} metricId - Metric ID (for API call when ready)
-   */
-  const renderStars = (
-    rating,
-    editable = false,
-    kraId = null,
-    metricId = null,
-  ) => {
-    const starCount = scoreToStars(rating);
-
-    return (
-      <View style={styles.starsContainer}>
-        {[1, 2, 3, 4, 5].map(star => (
-          <View
-            key={star}
-            style={[
-              styles.starButton,
-              {
-                // Increase tap area for better accessibility
-                minHeight: MIN_TAP_AREA,
-                minWidth: MIN_TAP_AREA,
-              },
-            ]}
-          >
-            <Star
-              size={STAR_SIZE}
-              color={star <= starCount ? '#FBBF24' : '#6B7280'}
-              fill={star <= starCount ? '#FBBF24' : 'transparent'}
-            />
-            {/* 
-              TODO: Uncomment when API is ready
-              <TouchableOpacity
-                onPress={() => {
-                  if (editable && kraId && metricId && !updatingMetrics.has(`${kraId}-${metricId}`)) {
-                    handleMetricUpdate(kraId, metricId, star * 20);
-                  }
-                }}
-                disabled={!editable || updatingMetrics.has(`${kraId}-${metricId}`)}
-                style={StyleSheet.absoluteFill}
-              />
-              {updatingMetrics.has(`${kraId}-${metricId}`) && (
-                <ActivityIndicator size="small" color={C.primary} />
-              )}
-            */}
-          </View>
-        ))}
-      </View>
-    );
-  };
 
   // =========================================================================
   // RENDER SECTIONS
@@ -430,7 +625,7 @@ export const KRA = ({ navigation }) => {
         <Text
           style={[
             styles.loadingText,
-            { color: C.textSecondary, marginTop: hp('2%') },
+            { color: C.textSecondary, marginTop: RESPONSIVE.lg },
           ]}
         >
           Loading KRA data...
@@ -448,18 +643,18 @@ export const KRA = ({ navigation }) => {
             backgroundColor: C.background,
             justifyContent: 'center',
             alignItems: 'center',
+            paddingHorizontal: RESPONSIVE.md,
           },
         ]}
       >
-        <AlertCircle size={wp('10%')} color={C.error} />
+        <AlertCircle size={RESPONSIVE.iconSize.xl} color={C.error} />
         <Text
           style={[
             styles.errorText,
             {
               color: C.error,
-              marginTop: hp('2%'),
+              marginTop: RESPONSIVE.lg,
               textAlign: 'center',
-              paddingHorizontal: wp('5%'),
             },
           ]}
         >
@@ -468,7 +663,7 @@ export const KRA = ({ navigation }) => {
         <TouchableOpacity
           style={[
             styles.retryBtn,
-            { backgroundColor: C.primary, marginTop: hp('2%') },
+            { backgroundColor: C.primary, marginTop: RESPONSIVE.lg },
           ]}
           onPress={loadKRA}
         >
@@ -482,7 +677,6 @@ export const KRA = ({ navigation }) => {
     return (
       <View style={[styles.container, { backgroundColor: C.background }]}>
         <StatusBar barStyle={C.statusBar} backgroundColor={C.background} />
-
         <View
           style={[
             styles.header,
@@ -496,7 +690,7 @@ export const KRA = ({ navigation }) => {
               { backgroundColor: C.surface, borderColor: C.border },
             ]}
           >
-            <ChevronLeft size={wp('5%')} color={C.textPrimary} />
+            <ChevronLeft size={RESPONSIVE.iconSize.md} color={C.textPrimary} />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
             <Text style={[styles.headerTitle, { color: C.textPrimary }]}>
@@ -506,28 +700,14 @@ export const KRA = ({ navigation }) => {
               Key Result Areas
             </Text>
           </View>
-          {/* <TouchableOpacity
-            style={[
-              styles.downloadBtn,
-              { backgroundColor: C.surface, borderColor: C.border },
-            ]}
-          >
-            <Download size={wp('4%')} color={C.textSecondary} />
-          </TouchableOpacity> */}
-          <View style={styles.downloadBtn}/>
+          <View style={styles.downloadBtn} />
         </View>
-
-        <View
-          style={[
-            styles.emptyContainer,
-            { justifyContent: 'center', alignItems: 'center', flex: 1 },
-          ]}
-        >
-          <BarChart3 size={wp('15%')} color={C.disabled} />
+        <View style={styles.emptyContainer}>
+          <BarChart3 size={RESPONSIVE.iconSize.xl} color={C.disabled} />
           <Text
             style={[
               styles.emptyTitle,
-              { color: C.textPrimary, marginTop: hp('2%') },
+              { color: C.textPrimary, marginTop: RESPONSIVE.lg },
             ]}
           >
             No KRA Data Available
@@ -538,8 +718,7 @@ export const KRA = ({ navigation }) => {
               {
                 color: C.textSecondary,
                 textAlign: 'center',
-                marginTop: hp('1%'),
-                marginHorizontal: wp('8%'),
+                marginTop: RESPONSIVE.md,
               },
             ]}
           >
@@ -571,7 +750,7 @@ export const KRA = ({ navigation }) => {
             { backgroundColor: C.surface, borderColor: C.border },
           ]}
         >
-          <ChevronLeft size={wp('5%')} color={C.textPrimary} />
+          <ChevronLeft size={RESPONSIVE.iconSize.md} color={C.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: C.textPrimary }]}>
@@ -581,18 +760,7 @@ export const KRA = ({ navigation }) => {
             Key Result Areas
           </Text>
         </View>
-        {/* <TouchableOpacity
-          style={[
-            styles.downloadBtn,
-            { backgroundColor: C.surface, borderColor: C.border },
-          ]}
-          onPress={() =>
-            showToast('Export report feature coming soon', 'info')
-          }
-        >
-          <Download size={wp('4%')} color={C.textSecondary} />
-        </TouchableOpacity> */}
-        <View style={styles.downloadBtn}/>
+        <View style={styles.downloadBtn} />
       </View>
 
       <ScrollView
@@ -614,11 +782,17 @@ export const KRA = ({ navigation }) => {
           ]}
         >
           <View style={styles.overviewHeader}>
-            <View>
-              <Text style={[styles.employeeName, { color: C.textPrimary }]}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text
+                style={[styles.employeeName, { color: C.textPrimary }]}
+                numberOfLines={2}
+              >
                 {userProfile.fullName || 'Employee'}
               </Text>
-              <Text style={[styles.employeeRole, { color: C.textSecondary }]}>
+              <Text
+                style={[styles.employeeRole, { color: C.textSecondary }]}
+                numberOfLines={2}
+              >
                 {userProfile.designation || 'Position'} •{' '}
                 {userProfile.department || 'Department'}
               </Text>
@@ -627,11 +801,9 @@ export const KRA = ({ navigation }) => {
               <Text style={[styles.ratingLabel, { color: C.textSecondary }]}>
                 Overall Rating
               </Text>
-              <View style={styles.ratingValueContainer}>
-                <Text style={[styles.overallRating, { color: C.textPrimary }]}>
-                  {summary.overallRating || '0'}
-                </Text>
-              </View>
+              <Text style={[styles.overallRating, { color: C.textPrimary }]}>
+                {summary.overallRating || '0'} / 5
+              </Text>
             </View>
           </View>
 
@@ -646,7 +818,7 @@ export const KRA = ({ navigation }) => {
                 },
               ]}
             >
-              <Target size={wp('5%')} color={C.primary} />
+              <Target size={RESPONSIVE.iconSize.md} color={C.primary} />
               <Text style={[styles.statValue, { color: C.textPrimary }]}>
                 {summary.completedKras}/{summary.totalKras}
               </Text>
@@ -654,7 +826,6 @@ export const KRA = ({ navigation }) => {
                 KRAs Completed
               </Text>
             </View>
-
             <View
               style={[
                 styles.statCard,
@@ -664,7 +835,7 @@ export const KRA = ({ navigation }) => {
                 },
               ]}
             >
-              <TrendingUp size={wp('5%')} color={C.success} />
+              <TrendingUp size={RESPONSIVE.iconSize.md} color={C.success} />
               <Text style={[styles.statValue, { color: C.textPrimary }]}>
                 {summary.avgAchievement}%
               </Text>
@@ -672,7 +843,6 @@ export const KRA = ({ navigation }) => {
                 Avg Achievement
               </Text>
             </View>
-
             <View
               style={[
                 styles.statCard,
@@ -682,7 +852,7 @@ export const KRA = ({ navigation }) => {
                 },
               ]}
             >
-              <Award size={wp('5%')} color={C.warning} />
+              <Award size={RESPONSIVE.iconSize.md} color={C.warning} />
               <Text style={[styles.statValue, { color: C.textPrimary }]}>
                 {summary.excellenceScore || '0/0'}
               </Text>
@@ -695,7 +865,7 @@ export const KRA = ({ navigation }) => {
 
         {/* KRA Sections */}
         {memoizedKRAs.map(kra => {
-          const isExpanded = expandedKRAs[kra._id];
+          const isExpanded = false;;
           const kraAchievement = kra.achievement || 0;
           const performanceColor = getPerformanceColor(kraAchievement);
 
@@ -709,7 +879,7 @@ export const KRA = ({ navigation }) => {
             >
               <TouchableOpacity
                 style={styles.kraHeaderMain}
-                onPress={() => toggleKRAExpanded(kra._id)}
+                onPress={() => handleKraPress(kra)}
                 activeOpacity={0.7}
               >
                 <View style={styles.kraTitleSection}>
@@ -719,14 +889,21 @@ export const KRA = ({ navigation }) => {
                       { backgroundColor: C.primary + '20' },
                     ]}
                   >
-                    <BarChart3 size={wp('4%')} color={C.primary} />
+                    <BarChart3
+                      size={RESPONSIVE.iconSize.md}
+                      color={C.primary}
+                    />
                   </View>
                   <View style={styles.kraInfo}>
-                    <Text style={[styles.kraTitle, { color: C.textPrimary }]}>
+                    <Text
+                      style={[styles.kraTitle, { color: C.textPrimary }]}
+                      numberOfLines={2}
+                    >
                       {kra.title}
                     </Text>
                     <Text
                       style={[styles.kraPeriod, { color: C.textSecondary }]}
+                      numberOfLines={1}
                     >
                       {kra.period}
                     </Text>
@@ -748,13 +925,25 @@ export const KRA = ({ navigation }) => {
                       {kraAchievement}%
                     </Text>
                   </View>
-                  <View style={styles.expandIcon}>
+                  {/* <TouchableOpacity
+                    onPress={e => {
+                      e.stopPropagation();
+                      toggleKRAExpanded(kra._id);
+                    }}
+                    style={styles.expandIcon}
+                  >
                     {isExpanded ? (
-                      <ChevronUp size={wp('4%')} color={C.textSecondary} />
+                      <ChevronUp
+                        size={RESPONSIVE.iconSize.sm}
+                        color={C.textSecondary}
+                      />
                     ) : (
-                      <ChevronDown size={wp('4%')} color={C.textSecondary} />
+                      <ChevronDown
+                        size={RESPONSIVE.iconSize.sm}
+                        color={C.textSecondary}
+                      />
                     )}
-                  </View>
+                  </TouchableOpacity> */}
                 </View>
               </TouchableOpacity>
 
@@ -767,6 +956,7 @@ export const KRA = ({ navigation }) => {
                         styles.descriptionText,
                         { color: C.textSecondary },
                       ]}
+                      numberOfLines={3}
                     >
                       {kra.description}
                     </Text>
@@ -775,187 +965,186 @@ export const KRA = ({ navigation }) => {
                       const metricPerformanceColor = getPerformanceColor(
                         metric.achievement,
                       );
-
                       return (
-                        <View
+                        <TouchableOpacity
                           key={metric._id}
-                          style={[
-                            styles.metricItem,
-                            {
-                              backgroundColor: C.background,
-                              borderColor: C.border,
-                            },
-                          ]}
+                          activeOpacity={0.7}
+                          onPress={() => handleKraPress(kra)}
                         >
-                          <View style={styles.metricHeader}>
-                            <View style={styles.metricTitleContainer}>
-                              <View style={styles.metricCategoryBadge}>
+                          <View
+                            style={[
+                              styles.metricItem,
+                              {
+                                backgroundColor: C.background,
+                                borderColor: C.border,
+                              },
+                            ]}
+                          >
+                            <View style={styles.metricHeader}>
+                              <View style={styles.metricTitleContainer}>
+                                <View style={styles.metricCategoryBadge}>
+                                  <Text
+                                    style={[
+                                      styles.metricCategory,
+                                      { color: C.primary },
+                                    ]}
+                                  >
+                                    {metric.category}
+                                  </Text>
+                                </View>
                                 <Text
                                   style={[
-                                    styles.metricCategory,
+                                    styles.metricName,
+                                    { color: C.textPrimary },
+                                  ]}
+                                  numberOfLines={2}
+                                >
+                                  {metric.name}
+                                </Text>
+                              </View>
+                            </View>
+
+                            <View style={styles.metricMetrics}>
+                              <View style={styles.metricItemBox}>
+                                <Text
+                                  style={[
+                                    styles.metricLabel,
+                                    { color: C.textSecondary },
+                                  ]}
+                                >
+                                  Target
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.metricValue,
                                     { color: C.primary },
                                   ]}
                                 >
-                                  {metric.category}
+                                  {metric.target?.toLocaleString() || 0}
                                 </Text>
                               </View>
-                              <Text
-                                style={[
-                                  styles.metricName,
-                                  { color: C.textPrimary },
-                                ]}
-                              >
-                                {metric.name}
-                              </Text>
+                              <View style={styles.metricItemBox}>
+                                <Text
+                                  style={[
+                                    styles.metricLabel,
+                                    { color: C.textSecondary },
+                                  ]}
+                                >
+                                  Achieved
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.metricValue,
+                                    {
+                                      color: metric.isCompleted
+                                        ? C.success
+                                        : C.textPrimary,
+                                    },
+                                  ]}
+                                >
+                                  {metric.achieved?.toLocaleString() || 0}
+                                </Text>
+                              </View>
+                              <View style={styles.metricItemBox}>
+                                <Text
+                                  style={[
+                                    styles.metricLabel,
+                                    { color: C.textSecondary },
+                                  ]}
+                                >
+                                  Weightage
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.metricValue,
+                                    { color: C.textPrimary },
+                                  ]}
+                                >
+                                  {metric.weightage || 0}%
+                                </Text>
+                              </View>
+                              <View style={styles.metricItemBox}>
+                                <Text
+                                  style={[
+                                    styles.metricLabel,
+                                    { color: C.textSecondary },
+                                  ]}
+                                >
+                                  Achievement
+                                </Text>
+                                <Text
+                                  style={[
+                                    styles.metricValue,
+                                    { color: metricPerformanceColor.text },
+                                  ]}
+                                >
+                                  {metric.achievement}%
+                                </Text>
+                              </View>
                             </View>
-                            <View style={styles.metricRating}>
-                              <Text
-                                style={[
-                                  styles.ratingLabelSmall,
-                                  { color: C.textSecondary },
-                                ]}
-                              >
-                                Self Rating
-                              </Text>
-                             
-                            </View>
-                          </View>
 
-                          <View style={styles.metricMetrics}>
-                            <View style={styles.metricItemBox}>
-                              <Text
+                            <View style={styles.progressBarContainer}>
+                              <View
                                 style={[
-                                  styles.metricLabel,
-                                  { color: C.textSecondary },
-                                ]}
-                              >
-                                Target
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.metricValue,
-                                  { color: C.primary },
-                                ]}
-                              >
-                                {metric.target?.toLocaleString() || 0}
-                              </Text>
-                            </View>
-                            <View style={styles.metricItemBox}>
-                              <Text
-                                style={[
-                                  styles.metricLabel,
-                                  { color: C.textSecondary },
-                                ]}
-                              >
-                                Achieved
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.metricValue,
+                                  styles.progressBar,
                                   {
-                                    color: metric.isCompleted
-                                      ? C.success
-                                      : C.textPrimary,
+                                    width: `${Math.min(
+                                      metric.achievement,
+                                      100,
+                                    )}%`,
+                                    backgroundColor: getPerformanceBarColor(
+                                      metric.achievement,
+                                    ),
                                   },
                                 ]}
-                              >
-                                {metric.achieved?.toLocaleString() || 0}
-                              </Text>
+                              />
                             </View>
-                            <View style={styles.metricItemBox}>
-                              <Text
+
+                            {metric.status === 'pending' && (
+                              <View
                                 style={[
-                                  styles.metricLabel,
-                                  { color: C.textSecondary },
+                                  styles.pendingBadge,
+                                  { backgroundColor: C.warning + '20' },
                                 ]}
                               >
-                                Weightage
-                              </Text>
-                              <Text
+                                <Clock
+                                  size={RESPONSIVE.iconSize.xs}
+                                  color={C.warning}
+                                />
+                                <Text
+                                  style={[
+                                    styles.pendingText,
+                                    { color: C.warning },
+                                  ]}
+                                >
+                                  Pending Review
+                                </Text>
+                              </View>
+                            )}
+
+                            {metric.isCompleted && (
+                              <View
                                 style={[
-                                  styles.metricValue,
-                                  { color: C.textPrimary },
+                                  styles.completedBadge,
+                                  { backgroundColor: C.success + '20' },
                                 ]}
                               >
-                                {metric.weightage || 0}%
-                              </Text>
-                            </View>
-                            <View style={styles.metricItemBox}>
-                              <Text
-                                style={[
-                                  styles.metricLabel,
-                                  { color: C.textSecondary },
-                                ]}
-                              >
-                                Achievement
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.metricValue,
-                                  { color: metricPerformanceColor.text },
-                                ]}
-                              >
-                                {metric.achievement}%
-                              </Text>
-                            </View>
+                                <Award
+                                  size={RESPONSIVE.iconSize.xs}
+                                  color={C.success}
+                                />
+                                <Text
+                                  style={[
+                                    styles.completedText,
+                                    { color: C.success },
+                                  ]}
+                                >
+                                  Target Achieved! 🎉
+                                </Text>
+                              </View>
+                            )}
                           </View>
-
-                          {/* Progress Bar */}
-                          <View style={styles.progressBarContainer}>
-                            <View
-                              style={[
-                                styles.progressBar,
-                                {
-                                  width: `${Math.min(
-                                    metric.achievement,
-                                    100,
-                                  )}%`,
-                                  backgroundColor: getPerformanceBarColor(
-                                    metric.achievement,
-                                  ),
-                                },
-                              ]}
-                            />
-                          </View>
-
-                          {metric.status === 'pending' && (
-                            <View
-                              style={[
-                                styles.pendingBadge,
-                                { backgroundColor: C.warning + '20' },
-                              ]}
-                            >
-                              <Clock size={wp('2.5%')} color={C.warning} />
-                              <Text
-                                style={[
-                                  styles.pendingText,
-                                  { color: C.warning },
-                                ]}
-                              >
-                                Pending Review
-                              </Text>
-                            </View>
-                          )}
-
-                          {metric.isCompleted && (
-                            <View
-                              style={[
-                                styles.completedBadge,
-                                { backgroundColor: C.success + '20' },
-                              ]}
-                            >
-                              <Award size={wp('2.5%')} color={C.success} />
-                              <Text
-                                style={[
-                                  styles.completedText,
-                                  { color: C.success },
-                                ]}
-                              >
-                                Target Achieved! 🎉
-                              </Text>
-                            </View>
-                          )}
-                        </View>
+                        </TouchableOpacity>
                       );
                     })}
                   </View>
@@ -974,7 +1163,6 @@ export const KRA = ({ navigation }) => {
           <Text style={[styles.summaryTitle, { color: C.textPrimary }]}>
             Performance Summary
           </Text>
-
           <View style={styles.summaryStats}>
             <View style={styles.summaryStat}>
               <Text style={[styles.summaryStatValue, { color: C.primary }]}>
@@ -1011,7 +1199,7 @@ export const KRA = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Recommendations based on performance */}
+        {/* Recommendations */}
         <View
           style={[
             styles.recommendationsCard,
@@ -1021,8 +1209,6 @@ export const KRA = ({ navigation }) => {
           <Text style={[styles.summaryTitle, { color: C.textPrimary }]}>
             Recommendations
           </Text>
-
-          {/* Render appropriate recommendation based on performance */}
           {(() => {
             const recommendation = getRecommendation(
               summary.avgAchievement,
@@ -1030,23 +1216,19 @@ export const KRA = ({ navigation }) => {
               summary.totalKras,
               summary.pendingKras,
             );
-
             const RecommendationIcon = recommendation.icon;
-
             return (
               <View
                 style={[
                   styles.recommendationItem,
                   {
-                    backgroundColor:
-                      C[recommendation.colorKey] + recommendation.bgSuffix,
-                    borderColor:
-                      C[recommendation.colorKey] + recommendation.borderSuffix,
+                    backgroundColor: C[recommendation.colorKey] + '15',
+                    borderColor: C[recommendation.colorKey] + '40',
                   },
                 ]}
               >
                 <RecommendationIcon
-                  size={wp('4%')}
+                  size={RESPONSIVE.iconSize.md}
                   color={C[recommendation.colorKey]}
                 />
                 <View style={styles.recommendationContent}>
@@ -1070,172 +1252,142 @@ export const KRA = ({ navigation }) => {
               </View>
             );
           })()}
-
-          {/* Additional focus areas recommendation if there are pending KRAs */}
-          {summary.completedKras < summary.totalKras && (
-            <View
-              style={[
-                styles.recommendationItem,
-                {
-                  backgroundColor: C.primary + '10',
-                  borderColor: C.primary + '30',
-                  marginTop: hp('1%'),
-                },
-              ]}
-            >
-              <Target size={wp('4%')} color={C.primary} />
-              <View style={styles.recommendationContent}>
-                <Text
-                  style={[styles.recommendationTitle, { color: C.textPrimary }]}
-                >
-                  Focus Areas 🎯
-                </Text>
-                <Text
-                  style={[
-                    styles.recommendationDesc,
-                    { color: C.textSecondary },
-                  ]}
-                >
-                  {summary.pendingKras} KRA(s) are pending completion.
-                  Prioritize these to improve your overall score and achieve
-                  your targets.
-                </Text>
-              </View>
-            </View>
-          )}
         </View>
 
-        <View style={{ height: hp('4%') }} />
+        <View style={{ height: RESPONSIVE.xl }} />
       </ScrollView>
+
+      {/* KRA Detail Modal */}
+      <KRADetailModal
+        visible={showDetailModal}
+        kra={selectedKRA}
+        onClose={closeDetailModal}
+        theme={theme}
+      />
     </View>
   );
 };
 
 // ============================================================================
-// STYLESHEET
+// STYLESHEET - FULLY RESPONSIVE
 // ============================================================================
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: hp('3%'),
-  },
+  container: { flex: 1 },
+  scrollContent: { paddingBottom: RESPONSIVE.lg },
+
+  // Header Styles
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: wp('4%'),
+    paddingHorizontal: RESPONSIVE.md,
     paddingTop: Platform.OS === 'ios' ? hp('6%') : hp('5%'),
-    paddingBottom: hp('2%'),
+    paddingBottom: RESPONSIVE.md,
     borderBottomWidth: 1,
   },
   backBtn: {
-    width: wp('9%'),
-    height: wp('9%'),
-    borderRadius: wp('2.5%'),
+    width: RESPONSIVE.componentHeight.button,
+    height: RESPONSIVE.componentHeight.button,
+    borderRadius: RESPONSIVE.borderRadius.md,
     borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
   headerCenter: {
     flex: 1,
     alignItems: 'center',
-    paddingHorizontal: wp('2%'),
+    paddingHorizontal: RESPONSIVE.sm,
   },
   headerTitle: {
-    fontSize: wp('4.5%'),
+    fontSize: RESPONSIVE.fontSize['2xl'],
     fontFamily: Fonts.bold,
+    textAlign: 'center',
   },
   headerSubtitle: {
-    fontSize: wp('2.5%'),
+    fontSize: RESPONSIVE.fontSize.sm,
     fontFamily: Fonts.regular,
     textAlign: 'center',
     marginTop: 2,
   },
   downloadBtn: {
-    width: wp('9%'),
-    height: wp('9%'),
-    // borderRadius: wp('2.5%'),
-    // borderWidth: 1,
+    width: RESPONSIVE.componentHeight.button,
+    height: RESPONSIVE.componentHeight.button,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
+
+  // Overview Card
   overviewCard: {
-    marginHorizontal: wp('4%'),
-    marginTop: hp('2%'),
-    borderRadius: wp('4%'),
+    marginHorizontal: RESPONSIVE.md,
+    marginTop: RESPONSIVE.lg,
+    borderRadius: RESPONSIVE.borderRadius.lg,
     borderWidth: 1,
-    padding: wp('4%'),
+    padding: RESPONSIVE.md,
   },
   overviewHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: hp('2%'),
+    marginBottom: RESPONSIVE.lg,
+    gap: RESPONSIVE.sm,
   },
   employeeName: {
-    fontSize: wp('4.5%'),
+    fontSize: RESPONSIVE.fontSize.lg,
     fontFamily: Fonts.bold,
+    flexShrink: 1,
   },
   employeeRole: {
-    fontSize: wp('3%'),
+    fontSize: RESPONSIVE.fontSize.base,
     fontFamily: Fonts.regular,
-    marginTop: 2,
+    marginTop: 4,
+    flexShrink: 1,
   },
-  ratingContainer: {
-    alignItems: 'flex-end',
-  },
+  ratingContainer: { alignItems: 'flex-end', flexShrink: 0 },
   ratingLabel: {
-    fontSize: wp('2.5%'),
+    fontSize: RESPONSIVE.fontSize.xs,
     fontFamily: Fonts.medium,
     marginBottom: 4,
   },
-  ratingValueContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: wp('1%'),
-  },
   overallRating: {
-    fontSize: wp('5%'),
+    fontSize: RESPONSIVE.fontSize.xl,
     fontFamily: Fonts.bold,
   },
-  starsContainer: {
-    flexDirection: 'row',
-    gap: STAR_PADDING,
-  },
-  starButton: {
-    padding: STAR_PADDING,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
+  // Stats Grid
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: wp('2%'),
+    gap: RESPONSIVE.sm,
+    justifyContent: 'space-between',
   },
   statCard: {
-    flex: 1,
-    minWidth: wp('28%'),
-    padding: wp('3%'),
-    borderRadius: wp('3%'),
+    flex: isMobile ? 1 : 0,
+    minWidth: isMobile ? '30%' : '29%',
+    padding: RESPONSIVE.md,
+    borderRadius: RESPONSIVE.borderRadius.md,
     borderWidth: 1,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   statValue: {
-    fontSize: wp('5%'),
+    fontSize: RESPONSIVE.fontSize.xl,
     fontFamily: Fonts.bold,
-    marginVertical: hp('0.5%'),
+    marginVertical: 6,
+    textAlign: 'center',
   },
   statLabel: {
-    fontSize: wp('2.5%'),
+    fontSize: RESPONSIVE.fontSize.xs,
     fontFamily: Fonts.medium,
     textAlign: 'center',
   },
+
+  // KRA Section
   kraSection: {
-    marginHorizontal: wp('4%'),
-    marginTop: hp('2%'),
-    borderRadius: wp('4%'),
+    marginHorizontal: RESPONSIVE.md,
+    marginTop: RESPONSIVE.lg,
+    borderRadius: RESPONSIVE.borderRadius.lg,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -1243,141 +1395,139 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: wp('4%'),
+    padding: RESPONSIVE.md,
+    gap: RESPONSIVE.sm,
   },
   kraTitleSection: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
-    gap: wp('3%'),
+    gap: RESPONSIVE.md,
+    minWidth: 0,
   },
   kraIcon: {
-    width: wp('10%'),
-    height: wp('10%'),
-    borderRadius: wp('2.5%'),
+    width: RESPONSIVE.componentHeight.button,
+    height: RESPONSIVE.componentHeight.button,
+    borderRadius: RESPONSIVE.borderRadius.md,
     justifyContent: 'center',
     alignItems: 'center',
+    flexShrink: 0,
   },
-  kraInfo: {
-    flex: 1,
-  },
+  kraInfo: { flex: 1, minWidth: 0 },
   kraTitle: {
-    fontSize: wp('3.5%'),
+    fontSize: RESPONSIVE.fontSize.base,
     fontFamily: Fonts.bold,
     marginBottom: 2,
   },
   kraPeriod: {
-    fontSize: wp('2.5%'),
+    fontSize: RESPONSIVE.fontSize.xs,
     fontFamily: Fonts.regular,
   },
   kraScoreSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: wp('2%'),
+    gap: RESPONSIVE.sm,
+    flexShrink: 0,
   },
   kraScoreBadge: {
-    paddingHorizontal: wp('2%'),
-    paddingVertical: 3,
-    borderRadius: wp('2%'),
+    paddingHorizontal: RESPONSIVE.sm,
+    paddingVertical: 6,
+    borderRadius: RESPONSIVE.borderRadius.md,
   },
   kraScoreText: {
-    fontSize: wp('2.5%'),
+    fontSize: RESPONSIVE.fontSize.sm,
     fontFamily: Fonts.bold,
   },
-  expandIcon: {
-    padding: 2,
-  },
+  expandIcon: { padding: 4 },
+
+  // Metrics
   metricsContainer: {
-    padding: wp('4%'),
-    paddingTop: 0,
-    gap: hp('1.5%'),
+    padding: RESPONSIVE.md,
+    paddingTop: RESPONSIVE.sm,
+    gap: RESPONSIVE.md,
   },
   descriptionText: {
-    fontSize: wp('2.8%'),
+    fontSize: RESPONSIVE.fontSize.base,
     fontFamily: Fonts.regular,
     lineHeight: hp('2.2%'),
-    marginBottom: hp('1%'),
+    marginBottom: RESPONSIVE.md,
   },
   metricItem: {
-    borderRadius: wp('3%'),
+    borderRadius: RESPONSIVE.borderRadius.md,
     borderWidth: 1,
-    padding: wp('3%'),
+    padding: RESPONSIVE.md,
   },
   metricHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: hp('1.5%'),
+    marginBottom: RESPONSIVE.md,
+    gap: RESPONSIVE.sm,
   },
-  metricTitleContainer: {
-    flex: 1,
-    marginRight: wp('2%'),
-  },
+  metricTitleContainer: { flex: 1, minWidth: 0 },
   metricCategoryBadge: {
     backgroundColor: '#3B82F620',
-    paddingHorizontal: wp('2%'),
-    paddingVertical: 2,
-    borderRadius: wp('1.5%'),
+    paddingHorizontal: RESPONSIVE.sm,
+    paddingVertical: 4,
+    borderRadius: RESPONSIVE.borderRadius.sm,
     alignSelf: 'flex-start',
     marginBottom: 4,
   },
   metricCategory: {
-    fontSize: wp('2.2%'),
+    fontSize: RESPONSIVE.fontSize.xs,
     fontFamily: Fonts.bold,
   },
   metricName: {
-    fontSize: wp('3%'),
+    fontSize: RESPONSIVE.fontSize.base,
     fontFamily: Fonts.medium,
   },
-  metricRating: {
-    alignItems: 'flex-end',
-  },
-  ratingLabelSmall: {
-    fontSize: wp('2%'),
-    fontFamily: Fonts.medium,
-    marginBottom: 2,
-  },
+
+  // Metric Metrics
   metricMetrics: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: wp('3%'),
-    marginBottom: hp('1.5%'),
+    gap: RESPONSIVE.md,
+    marginBottom: RESPONSIVE.md,
+    justifyContent: 'space-between',
   },
   metricItemBox: {
-    flex: 1,
-    minWidth: wp('20%'),
+    minWidth: isMobile ? '22%' : '20%',
   },
   metricLabel: {
-    fontSize: wp('2.2%'),
+    fontSize: RESPONSIVE.fontSize.xs,
     fontFamily: Fonts.regular,
     marginBottom: 2,
   },
   metricValue: {
-    fontSize: wp('2.8%'),
+    fontSize: RESPONSIVE.fontSize.base,
     fontFamily: Fonts.bold,
   },
+
+  // Progress Bar
   progressBarContainer: {
-    height: hp('0.8%'),
+    height: 6,
     backgroundColor: 'rgba(0,0,0,0.1)',
-    borderRadius: wp('1%'),
+    borderRadius: RESPONSIVE.borderRadius.sm,
     overflow: 'hidden',
-    marginBottom: hp('1%'),
+    marginBottom: RESPONSIVE.md,
   },
   progressBar: {
     height: '100%',
-    borderRadius: wp('1%'),
+    borderRadius: RESPONSIVE.borderRadius.sm,
   },
+
+  // Status Badges
   pendingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 4,
-    paddingHorizontal: wp('2%'),
-    paddingVertical: 2,
-    borderRadius: wp('2%'),
+    paddingHorizontal: RESPONSIVE.sm,
+    paddingVertical: 4,
+    borderRadius: RESPONSIVE.borderRadius.sm,
   },
   pendingText: {
-    fontSize: wp('2.2%'),
+    fontSize: RESPONSIVE.fontSize.xs,
     fontFamily: Fonts.medium,
   },
   completedBadge: {
@@ -1385,108 +1535,283 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     gap: 4,
-    paddingHorizontal: wp('2%'),
-    paddingVertical: 2,
-    borderRadius: wp('2%'),
+    paddingHorizontal: RESPONSIVE.sm,
+    paddingVertical: 4,
+    borderRadius: RESPONSIVE.borderRadius.sm,
   },
   completedText: {
-    fontSize: wp('2.2%'),
+    fontSize: RESPONSIVE.fontSize.xs,
     fontFamily: Fonts.medium,
   },
+
+  // Summary Card
   summaryCard: {
-    marginHorizontal: wp('4%'),
-    marginTop: hp('2%'),
-    borderRadius: wp('4%'),
+    marginHorizontal: RESPONSIVE.md,
+    marginTop: RESPONSIVE.lg,
+    borderRadius: RESPONSIVE.borderRadius.lg,
     borderWidth: 1,
-    padding: wp('4%'),
+    padding: RESPONSIVE.md,
   },
   summaryTitle: {
-    fontSize: wp('3.5%'),
+    fontSize: RESPONSIVE.fontSize.lg,
     fontFamily: Fonts.bold,
-    marginBottom: hp('2%'),
+    marginBottom: RESPONSIVE.md,
   },
   summaryStats: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
+    flexWrap: 'wrap',
+    gap: RESPONSIVE.md,
   },
   summaryStat: {
     alignItems: 'center',
     flex: 1,
+    minWidth: wp('30%'),
   },
   summaryStatValue: {
-    fontSize: wp('5%'),
+    fontSize: RESPONSIVE.fontSize.xl,
     fontFamily: Fonts.bold,
     marginBottom: 4,
   },
   summaryStatLabel: {
-    fontSize: wp('2.5%'),
+    fontSize: RESPONSIVE.fontSize.xs,
     fontFamily: Fonts.medium,
     textAlign: 'center',
   },
   summaryDivider: {
     width: 1,
-    height: hp('3%'),
+    height: 40,
     backgroundColor: '#E5E7EB',
   },
+
+  // Recommendations Card
   recommendationsCard: {
-    marginHorizontal: wp('4%'),
-    marginTop: hp('2%'),
-    marginBottom: hp('2%'),
-    borderRadius: wp('4%'),
+    marginHorizontal: RESPONSIVE.md,
+    marginTop: RESPONSIVE.lg,
+    borderRadius: RESPONSIVE.borderRadius.lg,
     borderWidth: 1,
-    padding: wp('4%'),
+    padding: RESPONSIVE.md,
   },
   recommendationItem: {
     flexDirection: 'row',
-    padding: wp('3%'),
-    borderRadius: wp('3%'),
+    padding: RESPONSIVE.md,
+    borderRadius: RESPONSIVE.borderRadius.md,
     borderWidth: 1,
-    gap: wp('2%'),
-    marginBottom: hp('1%'),
+    gap: RESPONSIVE.sm,
+    marginBottom: RESPONSIVE.md,
   },
-  recommendationContent: {
-    flex: 1,
-  },
+  recommendationContent: { flex: 1, minWidth: 0 },
   recommendationTitle: {
-    fontSize: wp('2.8%'),
+    fontSize: RESPONSIVE.fontSize.base,
     fontFamily: Fonts.bold,
-    marginBottom: 2,
+    marginBottom: 4,
   },
   recommendationDesc: {
-    fontSize: wp('2.4%'),
+    fontSize: RESPONSIVE.fontSize.sm,
     fontFamily: Fonts.regular,
-    lineHeight: hp('2%'),
+    lineHeight: 18,
   },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalContainer: {
+    maxHeight: SCREEN_HEIGHT * 0.9,
+    borderTopLeftRadius: RESPONSIVE.borderRadius.xl,
+    borderTopRightRadius: RESPONSIVE.borderRadius.xl,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: RESPONSIVE.md,
+    paddingVertical: RESPONSIVE.md,
+    borderBottomWidth: 1,
+  },
+  modalCloseBtn: { padding: RESPONSIVE.sm },
+  modalTitle: {
+    fontSize: RESPONSIVE.fontSize.lg,
+    fontFamily: Fonts.bold,
+  },
+  modalContent: {
+    padding: RESPONSIVE.md,
+    paddingBottom: RESPONSIVE.lg,
+  },
+  modalKraHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: RESPONSIVE.md,
+    marginBottom: RESPONSIVE.lg,
+  },
+  modalKraIcon: {
+    width: RESPONSIVE.componentHeight.touchable,
+    height: RESPONSIVE.componentHeight.touchable,
+    borderRadius: RESPONSIVE.borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  modalKraInfo: { flex: 1 },
+  modalKraTitle: {
+    fontSize: RESPONSIVE.fontSize.lg,
+    fontFamily: Fonts.bold,
+    marginBottom: 4,
+  },
+  modalKraPeriodContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+  },
+  modalKraPeriod: {
+    fontSize: RESPONSIVE.fontSize.base,
+    fontFamily: Fonts.regular,
+  },
+  modalAchievementBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: RESPONSIVE.md,
+    paddingVertical: 8,
+    borderRadius: RESPONSIVE.borderRadius.xl,
+    marginBottom: RESPONSIVE.lg,
+  },
+  modalAchievementText: {
+    fontSize: RESPONSIVE.fontSize.base,
+    fontFamily: Fonts.bold,
+  },
+  modalSection: { marginBottom: RESPONSIVE.lg },
+  modalSectionTitle: {
+    fontSize: RESPONSIVE.fontSize.lg,
+    fontFamily: Fonts.bold,
+    marginBottom: RESPONSIVE.md,
+  },
+  modalDescription: {
+    fontSize: RESPONSIVE.fontSize.base,
+    fontFamily: Fonts.regular,
+    lineHeight: 22,
+  },
+  modalMetricCard: {
+    borderRadius: RESPONSIVE.borderRadius.md,
+    borderWidth: 1,
+    padding: RESPONSIVE.md,
+    marginBottom: RESPONSIVE.md,
+  },
+  modalMetricHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: RESPONSIVE.md,
+  },
+  modalMetricCategory: {
+    backgroundColor: '#3B82F620',
+    paddingHorizontal: RESPONSIVE.sm,
+    paddingVertical: 4,
+    borderRadius: RESPONSIVE.borderRadius.sm,
+  },
+  modalMetricCategoryText: {
+    fontSize: RESPONSIVE.fontSize.xs,
+    fontFamily: Fonts.bold,
+  },
+  modalMetricName: {
+    fontSize: RESPONSIVE.fontSize.base,
+    fontFamily: Fonts.medium,
+    marginBottom: RESPONSIVE.md,
+  },
+  modalMetricStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: RESPONSIVE.md,
+    marginBottom: RESPONSIVE.md,
+  },
+  modalMetricStat: { flex: 1, minWidth: wp('20%') },
+  modalMetricStatLabel: {
+    fontSize: RESPONSIVE.fontSize.xs,
+    fontFamily: Fonts.regular,
+    marginBottom: 2,
+  },
+  modalMetricStatValue: {
+    fontSize: RESPONSIVE.fontSize.base,
+    fontFamily: Fonts.bold,
+  },
+  modalProgressBarContainer: {
+    height: 6,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: RESPONSIVE.borderRadius.sm,
+    overflow: 'hidden',
+    marginBottom: RESPONSIVE.md,
+  },
+  modalProgressBar: {
+    height: '100%',
+    borderRadius: RESPONSIVE.borderRadius.sm,
+  },
+  modalPendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: RESPONSIVE.sm,
+    paddingVertical: 4,
+    borderRadius: RESPONSIVE.borderRadius.sm,
+  },
+  modalPendingText: {
+    fontSize: RESPONSIVE.fontSize.xs,
+    fontFamily: Fonts.medium,
+  },
+  modalCompletedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: RESPONSIVE.sm,
+    paddingVertical: 4,
+    borderRadius: RESPONSIVE.borderRadius.sm,
+  },
+  modalCompletedText: {
+    fontSize: RESPONSIVE.fontSize.xs,
+    fontFamily: Fonts.medium,
+  },
+
+  // Empty State
+  emptyContainer: {
+    flex: 1,
+    paddingHorizontal: RESPONSIVE.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: RESPONSIVE.fontSize.xl,
+    fontFamily: Fonts.bold,
+    textAlign: 'center',
+    marginTop: RESPONSIVE.lg,
+  },
+  emptySubtitle: {
+    fontSize: RESPONSIVE.fontSize.base,
+    fontFamily: Fonts.regular,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginTop: RESPONSIVE.md,
+  },
+
+  // Loading/Error
   loadingText: {
-    fontSize: wp('3.5%'),
+    fontSize: RESPONSIVE.fontSize.lg,
     fontFamily: Fonts.medium,
   },
   errorText: {
-    fontSize: wp('3.5%'),
+    fontSize: RESPONSIVE.fontSize.lg,
     fontFamily: Fonts.medium,
   },
   retryBtn: {
-    paddingHorizontal: wp('6%'),
-    paddingVertical: hp('1.2%'),
-    borderRadius: wp('3%'),
+    paddingHorizontal: RESPONSIVE.md,
+    paddingVertical: 12,
+    borderRadius: RESPONSIVE.borderRadius.md,
   },
   retryBtnText: {
-    fontSize: wp('3.5%'),
+    fontSize: RESPONSIVE.fontSize.lg,
     fontFamily: Fonts.bold,
-  },
-  emptyContainer: {
-    flex: 1,
-    paddingHorizontal: wp('8%'),
-  },
-  emptyTitle: {
-    fontSize: wp('4.5%'),
-    fontFamily: Fonts.bold,
-  },
-  emptySubtitle: {
-    fontSize: wp('3.2%'),
-    fontFamily: Fonts.regular,
-    lineHeight: hp('2.5%'),
   },
 });
 

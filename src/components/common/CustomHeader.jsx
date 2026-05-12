@@ -65,17 +65,17 @@ const CustomHeader = ({
     );
   };
 
-  // ✅ FIX: Truncate name to 5 characters max
+  // ✅ FIX: Truncate name to 10 characters max
   const getDisplayName = name => {
     if (!name) return 'User';
     // Get first name only
     const firstName = name.split(' ')[0];
-    // If first name is 5 chars or less, show it fully
-    if (firstName.length <= 7) {
+    // If first name is 10 chars or less, show it fully
+    if (firstName.length <= 10) {
       return firstName;
     }
-    // If longer than 5, truncate with ellipsis
-    return firstName.substring(0, 5) + '...';
+    // If longer than 10, truncate with ellipsis
+    return firstName.substring(0, 10) + '...';
   };
 
   const displayName = getDisplayName(userName);

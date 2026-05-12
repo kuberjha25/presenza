@@ -36,6 +36,7 @@ const expenseReducer = (state = initialState, action) => {
         ...state,
         creating: true,
         uploading: true,
+        uploadProgress: 0,
         error: null,
       };
 
@@ -74,10 +75,12 @@ const expenseReducer = (state = initialState, action) => {
       };
 
     case FETCH_EXPENSES_SUCCESS:
+      // Ensure expenses is always an array
+      const expensesList = Array.isArray(action.payload) ? action.payload : [];
       return {
         ...state,
         loading: false,
-        expenses: action.payload,
+        expenses: expensesList,
         error: null,
       };
 
@@ -85,6 +88,7 @@ const expenseReducer = (state = initialState, action) => {
       return {
         ...state,
         loading: false,
+        expenses: [],
         error: action.payload,
       };
 
@@ -121,16 +125,17 @@ const expenseReducer = (state = initialState, action) => {
 
     case UPDATE_EXPENSE_SUCCESS: {
       const { expenseId, data } = action.payload;
-      
+
       const updatedExpenses = state.expenses.map(expense =>
         expense._id === expenseId || expense.id === expenseId
           ? { ...expense, ...data }
-          : expense
+          : expense,
       );
 
-      const updatedCurrentExpense = 
-        state.currentExpense && 
-        (state.currentExpense._id === expenseId || state.currentExpense.id === expenseId)
+      const updatedCurrentExpense =
+        state.currentExpense &&
+        (state.currentExpense._id === expenseId ||
+          state.currentExpense.id === expenseId)
           ? { ...state.currentExpense, ...data }
           : state.currentExpense;
 
@@ -163,11 +168,13 @@ const expenseReducer = (state = initialState, action) => {
         ...state,
         deleting: false,
         expenses: state.expenses.filter(
-          expense => expense._id !== action.payload && expense.id !== action.payload
+          expense =>
+            expense._id !== action.payload && expense.id !== action.payload,
         ),
-        currentExpense: 
-          state.currentExpense && 
-          (state.currentExpense._id === action.payload || state.currentExpense.id === action.payload)
+        currentExpense:
+          state.currentExpense &&
+          (state.currentExpense._id === action.payload ||
+            state.currentExpense.id === action.payload)
             ? null
             : state.currentExpense,
         error: null,
